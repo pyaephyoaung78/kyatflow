@@ -356,6 +356,33 @@ class DatabaseHelper {
       ''', arguments);
   }
 
+  /// Groups expense totals by category for the half-open [start, end) range.
+  Future<List<Map<String, Object?>>> getExpenseBreakdown({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!start.isBefore(end)) {
+      throw ArgumentError('start must be earlier than end');
+    }
+    return (await database).rawQuery(
+      '''
+      SELECT
+        c.id AS category_id,
+        c.name AS category_name,
+        c.icon AS category_icon,
+        c.color AS category_color,
+        SUM(t.amount) AS total_amount,
+        COUNT(t.id) AS transaction_count
+      FROM transactions AS t
+      INNER JOIN categories AS c ON c.id = t.category_id
+      WHERE t.type = 'expense' AND t.timestamp >= ? AND t.timestamp < ?
+      GROUP BY c.id, c.name, c.icon, c.color
+      ORDER BY total_amount DESC, c.name ASC
+      ''',
+      [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+    );
+  }
+
   /// Reads both tables inside one transaction for a consistent backup snapshot.
   Future<DatabaseBackupSnapshot> getBackupSnapshot() async {
     return (await database).transaction((txn) async {

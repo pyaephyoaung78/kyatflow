@@ -67,14 +67,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           initialTransaction: transaction,
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const ValueKey('add_transaction'),
-        onPressed: () => _openEntry(categories: state.categories),
-        backgroundColor: const Color(0xFF183D32),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add transaction'),
-      ),
     );
   }
 

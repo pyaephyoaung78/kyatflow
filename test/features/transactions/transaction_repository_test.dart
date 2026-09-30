@@ -11,6 +11,8 @@ import 'package:kyatflow/features/transactions/presentation/state/transaction_no
 import 'package:kyatflow/features/transactions/presentation/state/transaction_state.dart';
 import 'package:kyatflow/features/transactions/presentation/state/dashboard_notifier.dart';
 import 'package:kyatflow/features/transactions/presentation/state/dashboard_state.dart';
+import 'package:kyatflow/features/transactions/presentation/state/analytics_notifier.dart';
+import 'package:kyatflow/features/transactions/presentation/state/analytics_state.dart';
 import 'package:kyatflow/features/transactions/presentation/state/ledger_notifier.dart';
 import 'package:kyatflow/features/transactions/presentation/state/ledger_state.dart';
 import 'package:path/path.dart' as p;
@@ -239,6 +241,37 @@ void main() {
       expect(dashboard.state.summary.currentBalance, 1150);
     },
   );
+
+  test(
+    'analytics streams grouped expenses and switches calendar ranges',
+    () async {
+      final analytics = AnalyticsNotifier(
+        repository: repository,
+        clock: () => reference,
+      );
+      addTearDown(analytics.dispose);
+      await _waitForAnalytics(
+        analytics,
+        (state) => state.status == AnalyticsLoadStatus.ready,
+      );
+
+      await repository.insert(draft(amount: 250));
+      await repository.insert(
+        draft(amount: 75, timestamp: DateTime(2026, 9, 1, 10)),
+      );
+      await _waitForAnalytics(analytics, (state) => state.totalExpense == 325);
+      expect(analytics.state.categories.single.categoryName, 'Food');
+      expect(analytics.state.categories.single.transactionCount, 2);
+
+      await analytics.setPeriod(AnalyticsPeriod.thisWeek);
+      expect(analytics.state.totalExpense, 250);
+      expect(analytics.state.range.start, DateTime(2026, 9, 14));
+      expect(analytics.state.range.end, DateTime(2026, 9, 21));
+
+      await repository.insert(draft(amount: 100));
+      await _waitForAnalytics(analytics, (state) => state.totalExpense == 350);
+    },
+  );
 }
 
 Future<void> _waitForState(
@@ -278,6 +311,23 @@ Future<void> _waitForDashboard(
 Future<void> _waitForLedger(
   LedgerNotifier notifier,
   bool Function(LedgerState state) predicate,
+) async {
+  if (predicate(notifier.state)) return;
+  final completer = Completer<void>();
+  late final void Function() removeListener;
+  removeListener = notifier.addListener((state) {
+    if (!completer.isCompleted && predicate(state)) completer.complete();
+  });
+  try {
+    await completer.future.timeout(const Duration(seconds: 2));
+  } finally {
+    removeListener();
+  }
+}
+
+Future<void> _waitForAnalytics(
+  AnalyticsNotifier notifier,
+  bool Function(AnalyticsState state) predicate,
 ) async {
   if (predicate(notifier.state)) return;
   final completer = Completer<void>();

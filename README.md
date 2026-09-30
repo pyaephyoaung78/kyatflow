@@ -138,6 +138,20 @@ CSV-escaped and text that could be interpreted as a spreadsheet formula is
 neutralized. Files are written under `kyatflow_exports` in the application
 documents directory, then offered through the platform share/save sheet.
 
+## Navigation and analytics
+
+`MainShellScreen` provides five bottom destinations: Home, Analytics, an
+elevated center Add action, History, and Settings. The Add action opens the same
+transaction entry route from every tab and keeps the previously selected tab
+active after the form closes.
+
+Analytics uses an indexed SQLite `SUM(amount)` query grouped by expense category.
+Users can switch between the current Monday-based week and current calendar
+month. `fl_chart` renders the result as an interactive donut chart, while the
+ranked list shows each category's amount, percentage, and transaction count.
+Analytics subscribes to repository revisions, so adding, editing, or deleting a
+transaction refreshes the chart without a remote service or network request.
+
 ## Validation
 
 ```sh

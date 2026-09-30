@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'features/transactions/presentation/screens/home_shell.dart';
+import 'features/transactions/presentation/screens/main_shell_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +31,7 @@ class KyatFlowApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const HomeShell(),
+      home: const MainShellScreen(),
     );
   }
 }

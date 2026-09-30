@@ -9,6 +9,8 @@ import '../state/transaction_notifier.dart';
 import '../state/transaction_state.dart';
 import '../state/dashboard_notifier.dart';
 import '../state/dashboard_state.dart';
+import '../state/analytics_notifier.dart';
+import '../state/analytics_state.dart';
 import '../state/ledger_notifier.dart';
 import '../state/ledger_state.dart';
 
@@ -44,6 +46,13 @@ final dashboardStateProvider =
 final ledgerStateProvider =
     StateNotifierProvider.autoDispose<LedgerNotifier, LedgerState>((ref) {
       return LedgerNotifier(ref.watch(transactionRepositoryProvider));
+    });
+
+final analyticsStateProvider =
+    StateNotifierProvider.autoDispose<AnalyticsNotifier, AnalyticsState>((ref) {
+      return AnalyticsNotifier(
+        repository: ref.watch(transactionRepositoryProvider),
+      );
     });
 
 final csvBackupServiceProvider = Provider<CsvBackupService>((ref) {

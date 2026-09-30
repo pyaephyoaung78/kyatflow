@@ -1,4 +1,5 @@
 import '../entities/cash_flow_summary.dart';
+import '../entities/category_spending.dart';
 import '../entities/transaction_entry.dart';
 import '../entities/transaction_category.dart';
 import '../value_objects/transaction_date_filter.dart';
@@ -27,6 +28,11 @@ abstract interface class TransactionRepository {
   Future<List<TransactionEntry>> getLedgerTransactions({TransactionType? type});
 
   Future<List<TransactionCategory>> getCategories();
+
+  Future<List<CategorySpending>> getExpenseBreakdown({
+    required DateTime start,
+    required DateTime end,
+  });
 
   void dispose();
 }

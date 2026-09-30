@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kyatflow/features/transactions/domain/entities/cash_flow_summary.dart';
+import 'package:kyatflow/features/transactions/domain/entities/category_spending.dart';
 import 'package:kyatflow/features/transactions/domain/entities/transaction_category.dart';
 import 'package:kyatflow/features/transactions/domain/entities/transaction_entry.dart';
 import 'package:kyatflow/features/transactions/domain/repositories/transaction_repository.dart';
@@ -26,6 +27,15 @@ void main() {
     expect(find.text('MMK 750'), findsOneWidget);
     expect(find.text('Salary'), findsOneWidget);
     expect(find.text('Food'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('analytics_tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('See where your money goes'), findsOneWidget);
+    expect(find.text('This Week'), findsOneWidget);
+    expect(find.text('This Month'), findsOneWidget);
+    expect(find.text('Spending by category'), findsOneWidget);
+    expect(find.text('MMK 250'), findsWidgets);
+
     await tester.tap(find.byKey(const ValueKey('ledger_tab')));
     await tester.pumpAndSettle();
     expect(find.text('Transaction history'), findsOneWidget);
@@ -39,6 +49,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Salary'), findsOneWidget);
     expect(find.text('Food'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('settings_tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Local-first by design'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('add_transaction')));
+    await tester.pumpAndSettle();
+    expect(find.text('New transaction'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Local-first by design'), findsOneWidget);
   });
 }
 
@@ -105,6 +126,23 @@ class _FakeRepository implements TransactionRepository {
       totalIncome: 1000,
       totalExpense: 250,
     );
+  }
+
+  @override
+  Future<List<CategorySpending>> getExpenseBreakdown({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    return const [
+      CategorySpending(
+        categoryId: 2,
+        categoryName: 'Food',
+        categoryIcon: 'restaurant',
+        categoryColor: 0xFFFF9800,
+        amount: 250,
+        transactionCount: 1,
+      ),
+    ];
   }
 
   @override

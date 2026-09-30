@@ -316,6 +316,53 @@ void main() {
     expect(row['category_color'], 0xFF008000);
   });
 
+  test(
+    'expense breakdown groups, ranks, and excludes range boundaries',
+    () async {
+      final food = await category(name: 'Cafe');
+      final transport = await category(name: 'Taxi');
+      final income = await category(name: 'Bonus', type: 'income');
+      final start = DateTime.utc(2026, 9, 14);
+      final end = DateTime.utc(2026, 9, 21);
+      await helper.insertTransaction(
+        amount: 100,
+        type: 'expense',
+        categoryId: food,
+        timestamp: start,
+      );
+      await helper.insertTransaction(
+        amount: 250,
+        type: 'expense',
+        categoryId: food,
+        timestamp: date,
+      );
+      await helper.insertTransaction(
+        amount: 500,
+        type: 'expense',
+        categoryId: transport,
+        timestamp: date,
+      );
+      await helper.insertTransaction(
+        amount: 999,
+        type: 'expense',
+        categoryId: transport,
+        timestamp: end,
+      );
+      await helper.insertTransaction(
+        amount: 10000,
+        type: 'income',
+        categoryId: income,
+        timestamp: date,
+      );
+
+      final rows = await helper.getExpenseBreakdown(start: start, end: end);
+      expect(rows.map((row) => row['category_name']), ['Taxi', 'Cafe']);
+      expect(rows.first['total_amount'], 500.0);
+      expect(rows.last['total_amount'], 350.0);
+      expect(rows.last['transaction_count'], 2);
+    },
+  );
+
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {
