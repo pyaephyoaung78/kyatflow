@@ -107,6 +107,21 @@ from another part of the app also refresh the visible list and monthly totals.
 The three totals are calculated together by SQLite with `SUM(CASE ...)`; Dart
 does not load every transaction to calculate the dashboard.
 
+## Transaction entry screen
+
+`RiverpodTransactionEntryScreen` connects the entry form directly to
+`transactionStateProvider`. Pass categories loaded from SQLite as
+`TransactionCategoryOption` values; each option must use its real database ID.
+The reusable `TransactionEntryScreen` also accepts an `onSubmit` callback for
+tests or another state-management boundary.
+
+The form includes an animated expense/income toggle, type-filtered category
+chips, a note field, and a fixed 4×4 keypad. Expressions use standard operator
+precedence and are evaluated locally as the user enters them. Submitted totals
+are rounded to two decimal places. Empty/incomplete expressions, division by
+zero, missing categories, non-positive totals, and notes over 200 characters are
+blocked before a repository write.
+
 ## Validation
 
 ```sh
