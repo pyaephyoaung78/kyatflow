@@ -228,6 +228,45 @@ void main() {
     expect((await helper.getTransaction(id))!['amount'], 2500.5);
   });
 
+  test('cash-flow aggregation is calculated natively for one range', () async {
+    final expenseCategory = await category();
+    final incomeCategory = await category(name: 'Salary', type: 'income');
+    final monthStart = DateTime.utc(2026, 9);
+    final monthEnd = DateTime.utc(2026, 10);
+    await helper.insertTransaction(
+      amount: 100000,
+      type: 'income',
+      categoryId: incomeCategory,
+      timestamp: date,
+    );
+    await helper.insertTransaction(
+      amount: 35000,
+      type: 'expense',
+      categoryId: expenseCategory,
+      timestamp: date,
+    );
+    await helper.insertTransaction(
+      amount: 999999,
+      type: 'income',
+      categoryId: incomeCategory,
+      timestamp: monthEnd,
+    );
+
+    final totals = await helper.getCashFlowSummary(
+      start: monthStart,
+      end: monthEnd,
+    );
+    expect(totals['total_income'], 100000.0);
+    expect(totals['total_expense'], 35000.0);
+    expect(totals['current_balance'], 65000.0);
+
+    final empty = await helper.getCashFlowSummary(
+      start: DateTime.utc(2027),
+      end: DateTime.utc(2027, 2),
+    );
+    expect(empty.values, everyElement(0.0));
+  });
+
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {

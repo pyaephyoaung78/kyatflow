@@ -235,6 +235,37 @@ class DatabaseHelper {
     );
   }
 
+  /// Computes cash-flow totals in SQLite for the half-open [start, end) range.
+  ///
+  /// A single aggregate query is used so all three values come from the same
+  /// database snapshot. `COALESCE` converts an empty period into zero totals.
+  Future<Map<String, Object?>> getCashFlowSummary({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!start.isBefore(end)) {
+      throw ArgumentError('start must be earlier than end');
+    }
+    final rows = await (await database).rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0.0)
+          AS total_income,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0.0)
+          AS total_expense,
+        COALESCE(SUM(CASE
+          WHEN type = 'income' THEN amount
+          WHEN type = 'expense' THEN -amount
+          ELSE 0
+        END), 0.0) AS current_balance
+      FROM transactions
+      WHERE timestamp >= ? AND timestamp < ?
+      ''',
+      [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+    );
+    return rows.single;
+  }
+
   /// Replaces editable fields; a null [note] clears an existing note.
   Future<int> updateTransaction({
     required int id,

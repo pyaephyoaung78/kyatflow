@@ -1,0 +1,202 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kyatflow/core/database/database_helper.dart';
+import 'package:kyatflow/features/transactions/data/repositories/sqlite_transaction_repository.dart';
+import 'package:kyatflow/features/transactions/domain/entities/transaction_entry.dart';
+import 'package:kyatflow/features/transactions/domain/repositories/transaction_repository.dart';
+import 'package:kyatflow/features/transactions/domain/value_objects/transaction_date_filter.dart';
+import 'package:kyatflow/features/transactions/presentation/state/transaction_notifier.dart';
+import 'package:kyatflow/features/transactions/presentation/state/transaction_state.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+void main() {
+  sqfliteFfiInit();
+  late Directory directory;
+  late DatabaseHelper database;
+  late SqliteTransactionRepository repository;
+  late int expenseCategoryId;
+  late int incomeCategoryId;
+  final reference = DateTime(2026, 9, 15, 12);
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp(
+      'kyatflow_repository_test_',
+    );
+    database = DatabaseHelper.forTesting(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: p.join(directory.path, 'test.db'),
+    );
+    repository = SqliteTransactionRepository(database);
+    expenseCategoryId = await database.insertCategory(
+      name: 'Food',
+      icon: 'restaurant',
+      color: 0xFFFF9800,
+      type: 'expense',
+    );
+    incomeCategoryId = await database.insertCategory(
+      name: 'Salary',
+      icon: 'wallet',
+      color: 0xFF4CAF50,
+      type: 'income',
+    );
+  });
+
+  tearDown(() async {
+    repository.dispose();
+    await database.close();
+    await directory.delete(recursive: true);
+  });
+
+  TransactionDraft draft({
+    double amount = 100,
+    TransactionType type = TransactionType.expense,
+    DateTime? timestamp,
+  }) {
+    return TransactionDraft(
+      amount: amount,
+      type: type,
+      categoryId: type == TransactionType.expense
+          ? expenseCategoryId
+          : incomeCategoryId,
+      timestamp: timestamp ?? reference,
+      note: 'Test',
+    );
+  }
+
+  test('date filters use local calendar day, Monday week, and month', () async {
+    final sundayBefore = DateTime(2026, 9, 13, 23, 59);
+    final monday = DateTime(2026, 9, 14);
+    final today = DateTime(2026, 9, 15, 8);
+    final tomorrow = DateTime(2026, 9, 16);
+    await repository.insert(draft(timestamp: sundayBefore));
+    final mondayId = await repository.insert(draft(timestamp: monday));
+    final todayId = await repository.insert(draft(timestamp: today));
+    final tomorrowId = await repository.insert(draft(timestamp: tomorrow));
+
+    final todayRows = await repository.getTransactions(
+      filter: TransactionDateFilter.today,
+      referenceDate: reference,
+    );
+    final weekRows = await repository.getTransactions(
+      filter: TransactionDateFilter.thisWeek,
+      referenceDate: reference,
+    );
+    final monthRows = await repository.getTransactions(
+      filter: TransactionDateFilter.thisMonth,
+      referenceDate: reference,
+    );
+
+    expect(todayRows.map((item) => item.id), [todayId]);
+    expect(weekRows.map((item) => item.id), [tomorrowId, todayId, mondayId]);
+    expect(monthRows, hasLength(4));
+  });
+
+  test(
+    'repository aggregates, edits, deletes, and publishes revisions',
+    () async {
+      final revisions = <int>[];
+      final subscription = repository.changes.listen(revisions.add);
+      final incomeId = await repository.insert(
+        draft(amount: 100000, type: TransactionType.income),
+      );
+      final expenseId = await repository.insert(draft(amount: 35000));
+      await repository.insert(
+        draft(
+          amount: 900000,
+          type: TransactionType.income,
+          timestamp: DateTime(2026, 10),
+        ),
+      );
+
+      final summary = await repository.getMonthlyCashFlow(reference);
+      expect(summary.totalIncome, 100000);
+      expect(summary.totalExpense, 35000);
+      expect(summary.currentBalance, 65000);
+
+      final expense = (await repository.getTransactions(
+        filter: TransactionDateFilter.thisMonth,
+        referenceDate: reference,
+      )).firstWhere((item) => item.id == expenseId);
+      await repository.edit(
+        TransactionEntry(
+          id: expense.id,
+          amount: 25000,
+          type: expense.type,
+          categoryId: expense.categoryId,
+          timestamp: expense.timestamp,
+          note: 'Edited',
+        ),
+      );
+      await repository.delete(incomeId);
+
+      final afterChanges = await repository.getMonthlyCashFlow(reference);
+      expect(afterChanges.currentBalance, -25000);
+      expect(revisions, [1, 2, 3, 4, 5]);
+      await expectLater(
+        repository.delete(incomeId),
+        throwsA(isA<TransactionNotFoundException>()),
+      );
+      expect(revisions, [1, 2, 3, 4, 5]);
+      await subscription.cancel();
+    },
+  );
+
+  test(
+    'notifier streams list and monthly balance updates to its state',
+    () async {
+      final notifier = TransactionNotifier(
+        repository: repository,
+        clock: () => reference,
+      );
+      addTearDown(notifier.dispose);
+      await _waitForState(
+        notifier,
+        (state) => state.status == TransactionLoadStatus.ready,
+      );
+
+      final incomeId = await notifier.add(
+        draft(amount: 50000, type: TransactionType.income),
+      );
+      await notifier.add(draft(amount: 12500));
+      expect(notifier.state.transactions, hasLength(2));
+      expect(notifier.state.summary.currentBalance, 37500);
+      expect(notifier.state.isMutating, isFalse);
+
+      await notifier.setFilter(TransactionDateFilter.today);
+      expect(notifier.state.filter, TransactionDateFilter.today);
+      expect(notifier.state.transactions, hasLength(2));
+
+      // A write through the repository still reaches the notifier via changes.
+      await repository.insert(draft(timestamp: DateTime(2026, 9, 14, 10)));
+      await _waitForState(
+        notifier,
+        (state) => state.summary.totalExpense == 12600,
+      );
+      expect(notifier.state.transactions, hasLength(2));
+
+      await notifier.delete(incomeId);
+      expect(notifier.state.summary.currentBalance, -12600);
+      expect(notifier.state.transactions, hasLength(1));
+    },
+  );
+}
+
+Future<void> _waitForState(
+  TransactionNotifier notifier,
+  bool Function(TransactionState state) predicate,
+) async {
+  if (predicate(notifier.state)) return;
+  final completer = Completer<void>();
+  late final void Function() removeListener;
+  removeListener = notifier.addListener((state) {
+    if (!completer.isCompleted && predicate(state)) completer.complete();
+  });
+  try {
+    await completer.future.timeout(const Duration(seconds: 2));
+  } finally {
+    removeListener();
+  }
+}

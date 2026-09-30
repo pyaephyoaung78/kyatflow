@@ -1,7 +1,8 @@
 # KyatFlow
 
-A local-only personal expense tracker built with Flutter. This first step adds
-the SQLite foundation; feature models, repositories, and screens come next.
+A local-only personal expense tracker built with Flutter, SQLite, and Riverpod.
+The project currently includes the persistence, repository, and transaction
+state-management layers; screens come next.
 
 ## Structure
 
@@ -9,9 +10,9 @@ the SQLite foundation; feature models, repositories, and screens come next.
 lib/
   core/database/database_helper.dart
   features/transactions/
-    data/           # Row models, local sources, repository implementations
-    domain/         # Plain Dart entities, contracts, business rules
-    presentation/   # Screens, widgets, state management
+    data/           # SQLite row models and repository implementation
+    domain/         # Entities, date filters, repository contract
+    presentation/   # Riverpod providers and immutable transaction state
   main.dart
 ```
 
@@ -77,6 +78,34 @@ Invalid input throws `ArgumentError`; SQLite constraint failures propagate as
 
 The standard [sqflite plugin](https://pub.dev/packages/sqflite) supports Android,
 iOS, and macOS. Linux/Windows/web runtime support would require another adapter.
+
+## Transaction state
+
+Watch `transactionStateProvider` in a `ConsumerWidget`. Its state publishes the
+filtered transaction list, active-month cash-flow summary, loading/mutation
+flags, and any error. Today uses local midnight boundaries, weeks start Monday,
+and all date ranges use an exclusive end boundary.
+
+```dart
+final state = ref.watch(transactionStateProvider);
+final notifier = ref.read(transactionStateProvider.notifier);
+
+Text('Balance: ${state.summary.currentBalance}');
+await notifier.setFilter(TransactionDateFilter.today);
+await notifier.add(TransactionDraft(
+  amount: 3500,
+  type: TransactionType.expense,
+  categoryId: foodCategoryId,
+  timestamp: DateTime.now(),
+  note: 'Lunch',
+));
+```
+
+`SqliteTransactionRepository` emits a revision after each successful insert,
+edit, or delete. The notifier listens to those revisions, so repository writes
+from another part of the app also refresh the visible list and monthly totals.
+The three totals are calculated together by SQLite with `SUM(CASE ...)`; Dart
+does not load every transaction to calculate the dashboard.
 
 ## Validation
 
