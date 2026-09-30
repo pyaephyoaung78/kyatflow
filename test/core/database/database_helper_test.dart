@@ -57,7 +57,7 @@ void main() {
         connections.every((db) => identical(db, connections.first)),
         isTrue,
       );
-      expect(await connections.first.getVersion(), 1);
+      expect(await connections.first.getVersion(), 2);
       expect(
         (await connections.first.rawQuery(
           'PRAGMA foreign_keys',
@@ -71,7 +71,10 @@ void main() {
     final id = await category(name: "  Moe's food  ");
     await category(name: 'Salary', type: 'income');
     expect((await helper.getCategory(id))!['name'], "Moe's food");
-    expect((await helper.getCategories(type: 'expense')).length, 1);
+    expect(
+      (await helper.getCategories(type: 'expense')).map((row) => row['id']),
+      contains(id),
+    );
     expect(
       await helper.updateCategory(
         id: id,
@@ -267,6 +270,52 @@ void main() {
     expect(empty.values, everyElement(0.0));
   });
 
+  test(
+    'dashboard uses all-time balance and active-month income/expense',
+    () async {
+      final expenseCategory = await category();
+      final incomeCategory = await category(name: 'Consulting', type: 'income');
+      final monthStart = DateTime.utc(2026, 9);
+      final monthEnd = DateTime.utc(2026, 10);
+      await helper.insertTransaction(
+        amount: 50000,
+        type: 'income',
+        categoryId: incomeCategory,
+        timestamp: DateTime.utc(2026, 8, 20),
+      );
+      await helper.insertTransaction(
+        amount: 100000,
+        type: 'income',
+        categoryId: incomeCategory,
+        timestamp: date,
+      );
+      await helper.insertTransaction(
+        amount: 30000,
+        type: 'expense',
+        categoryId: expenseCategory,
+        timestamp: date,
+      );
+
+      final totals = await helper.getDashboardSummary(
+        start: monthStart,
+        end: monthEnd,
+      );
+      expect(totals['current_balance'], 120000.0);
+      expect(totals['total_income'], 100000.0);
+      expect(totals['total_expense'], 30000.0);
+    },
+  );
+
+  test('transaction details include joined category metadata', () async {
+    final categoryId = await category(name: 'Coffee');
+    final id = await transaction(categoryId);
+    final row = (await helper.getTransactionDetails(limit: 1)).single;
+    expect(row['id'], id);
+    expect(row['category_name'], 'Coffee');
+    expect(row['category_icon'], 'restaurant');
+    expect(row['category_color'], 0xFF008000);
+  });
+
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {
@@ -295,7 +344,58 @@ void main() {
     await expectLater(helper.initialize(), throwsStateError);
     await helper.initialize();
     expect(factory.attempts, 2);
-    expect(await helper.getCategories(), isEmpty);
+    expect(await helper.getCategories(), hasLength(10));
+  });
+
+  test('version 2 migration preserves an existing category set', () async {
+    await helper.close();
+    final legacyPath = p.join(directory.path, 'legacy.db');
+    final legacyDatabase = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE categories (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              icon TEXT NOT NULL,
+              color INTEGER NOT NULL,
+              type TEXT NOT NULL,
+              UNIQUE (id, type)
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE transactions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              amount REAL NOT NULL,
+              type TEXT NOT NULL,
+              category_id INTEGER NOT NULL,
+              timestamp INTEGER NOT NULL,
+              note TEXT
+            )
+          ''');
+          await db.insert('categories', {
+            'name': 'My custom category',
+            'icon': 'star',
+            'color': 0xFF112233,
+            'type': 'expense',
+          });
+        },
+      ),
+    );
+    await legacyDatabase.close();
+
+    helper = DatabaseHelper.forTesting(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: legacyPath,
+    );
+    await helper.initialize();
+
+    expect(await (await helper.database).getVersion(), 2);
+    final categories = await helper.getCategories();
+    expect(categories, hasLength(1));
+    expect(categories.single['name'], 'My custom category');
   });
 }
 

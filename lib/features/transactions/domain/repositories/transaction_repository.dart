@@ -1,5 +1,6 @@
 import '../entities/cash_flow_summary.dart';
 import '../entities/transaction_entry.dart';
+import '../entities/transaction_category.dart';
 import '../value_objects/transaction_date_filter.dart';
 
 abstract interface class TransactionRepository {
@@ -18,6 +19,14 @@ abstract interface class TransactionRepository {
   });
 
   Future<CashFlowSummary> getMonthlyCashFlow(DateTime activeMonth);
+
+  Future<CashFlowSummary> getDashboardCashFlow(DateTime activeMonth);
+
+  Future<List<TransactionEntry>> getRecentTransactions({int limit = 5});
+
+  Future<List<TransactionEntry>> getLedgerTransactions({TransactionType? type});
+
+  Future<List<TransactionCategory>> getCategories();
 
   void dispose();
 }

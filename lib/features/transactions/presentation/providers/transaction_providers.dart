@@ -2,10 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/backup/csv_backup_service.dart';
 import '../../data/repositories/sqlite_transaction_repository.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../state/transaction_notifier.dart';
 import '../state/transaction_state.dart';
+import '../state/dashboard_notifier.dart';
+import '../state/dashboard_state.dart';
+import '../state/ledger_notifier.dart';
+import '../state/ledger_state.dart';
 
 final databaseHelperProvider = Provider<DatabaseHelper>((ref) {
   return DatabaseHelper.instance;
@@ -28,3 +33,19 @@ final transactionStateProvider =
         repository: ref.watch(transactionRepositoryProvider),
       );
     });
+
+final dashboardStateProvider =
+    StateNotifierProvider.autoDispose<DashboardNotifier, DashboardState>((ref) {
+      return DashboardNotifier(
+        repository: ref.watch(transactionRepositoryProvider),
+      );
+    });
+
+final ledgerStateProvider =
+    StateNotifierProvider.autoDispose<LedgerNotifier, LedgerState>((ref) {
+      return LedgerNotifier(ref.watch(transactionRepositoryProvider));
+    });
+
+final csvBackupServiceProvider = Provider<CsvBackupService>((ref) {
+  return CsvBackupService(databaseHelper: ref.watch(databaseHelperProvider));
+});

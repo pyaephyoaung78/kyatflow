@@ -71,8 +71,9 @@ Invalid input throws `ArgumentError`; SQLite constraint failures propagate as
   with ID as the tie-breaker. Indexes cover date, type/date, category/date, and
   category type/name queries. IDs are indexed by their primary keys.
 - Amount uses REAL as requested, so it has floating-point precision limits.
-- Schema version is 1. Future schema changes should increment `databaseVersion`
-  and add an `onUpgrade` migration that preserves existing data.
+- Schema version is 2. The version-2 data migration adds default local
+  categories only when the category table is empty; existing categories and
+  transactions remain untouched.
 - Call `close()` only when all database operations are idle, not on each screen
   disposal. The connection is intended to live for the application lifetime.
 
@@ -121,6 +122,21 @@ precedence and are evaluated locally as the user enters them. Submitted totals
 are rounded to two decimal places. Empty/incomplete expressions, division by
 zero, missing categories, non-positive totals, and notes over 200 characters are
 blocked before a repository write.
+
+## Dashboard, ledger, and backup
+
+The app now opens on a dashboard with all-time balance, current-month income and
+expenses, and the five most recent entries. The History tab groups the complete
+ledger by local calendar date and filters it with All, Income, and Expense
+chips. Both screens listen to repository revisions and refresh after a local
+insert, edit, or delete.
+
+The dashboard export button creates one UTF-8 `.csv` file containing every row
+from both SQLite tables. A `record_type` column distinguishes categories from
+transactions, allowing unused categories to remain in the backup. Values are
+CSV-escaped and text that could be interpreted as a spreadsheet formula is
+neutralized. Files are written under `kyatflow_exports` in the application
+documents directory, then offered through the platform share/save sheet.
 
 ## Validation
 

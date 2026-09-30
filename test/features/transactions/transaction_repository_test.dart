@@ -9,6 +9,10 @@ import 'package:kyatflow/features/transactions/domain/repositories/transaction_r
 import 'package:kyatflow/features/transactions/domain/value_objects/transaction_date_filter.dart';
 import 'package:kyatflow/features/transactions/presentation/state/transaction_notifier.dart';
 import 'package:kyatflow/features/transactions/presentation/state/transaction_state.dart';
+import 'package:kyatflow/features/transactions/presentation/state/dashboard_notifier.dart';
+import 'package:kyatflow/features/transactions/presentation/state/dashboard_state.dart';
+import 'package:kyatflow/features/transactions/presentation/state/ledger_notifier.dart';
+import 'package:kyatflow/features/transactions/presentation/state/ledger_state.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -182,11 +186,98 @@ void main() {
       expect(notifier.state.transactions, hasLength(1));
     },
   );
+
+  test(
+    'dashboard and ledger stream repository changes and type filters',
+    () async {
+      final dashboard = DashboardNotifier(
+        repository: repository,
+        clock: () => reference,
+      );
+      final ledger = LedgerNotifier(repository);
+      addTearDown(dashboard.dispose);
+      addTearDown(ledger.dispose);
+      await _waitForDashboard(
+        dashboard,
+        (state) => state.status == DashboardLoadStatus.ready,
+      );
+      await _waitForLedger(
+        ledger,
+        (state) => state.status == LedgerLoadStatus.ready,
+      );
+
+      await repository.insert(
+        draft(
+          amount: 1000,
+          type: TransactionType.income,
+          timestamp: DateTime(2026, 8, 20),
+        ),
+      );
+      await repository.insert(draft(amount: 250));
+      await _waitForDashboard(
+        dashboard,
+        (state) => state.summary.currentBalance == 750,
+      );
+      await _waitForLedger(ledger, (state) => state.transactions.length == 2);
+
+      expect(dashboard.state.summary.totalIncome, 0);
+      expect(dashboard.state.summary.totalExpense, 250);
+      expect(dashboard.state.recentTransactions.first.categoryName, 'Food');
+      expect(dashboard.state.categories, isNotEmpty);
+
+      await ledger.setFilter(LedgerTypeFilter.income);
+      expect(ledger.state.transactions, hasLength(1));
+      expect(ledger.state.transactions.single.type, TransactionType.income);
+      expect(ledger.state.transactions.single.categoryName, 'Salary');
+
+      await repository.insert(draft(amount: 400, type: TransactionType.income));
+      await _waitForLedger(ledger, (state) => state.transactions.length == 2);
+      await _waitForDashboard(
+        dashboard,
+        (state) => state.summary.totalIncome == 400,
+      );
+      expect(dashboard.state.summary.currentBalance, 1150);
+    },
+  );
 }
 
 Future<void> _waitForState(
   TransactionNotifier notifier,
   bool Function(TransactionState state) predicate,
+) async {
+  if (predicate(notifier.state)) return;
+  final completer = Completer<void>();
+  late final void Function() removeListener;
+  removeListener = notifier.addListener((state) {
+    if (!completer.isCompleted && predicate(state)) completer.complete();
+  });
+  try {
+    await completer.future.timeout(const Duration(seconds: 2));
+  } finally {
+    removeListener();
+  }
+}
+
+Future<void> _waitForDashboard(
+  DashboardNotifier notifier,
+  bool Function(DashboardState state) predicate,
+) async {
+  if (predicate(notifier.state)) return;
+  final completer = Completer<void>();
+  late final void Function() removeListener;
+  removeListener = notifier.addListener((state) {
+    if (!completer.isCompleted && predicate(state)) completer.complete();
+  });
+  try {
+    await completer.future.timeout(const Duration(seconds: 2));
+  } finally {
+    removeListener();
+  }
+}
+
+Future<void> _waitForLedger(
+  LedgerNotifier notifier,
+  bool Function(LedgerState state) predicate,
 ) async {
   if (predicate(notifier.state)) return;
   final completer = Completer<void>();

@@ -22,6 +22,9 @@ class TransactionEntry {
     required this.categoryId,
     required this.timestamp,
     this.note,
+    this.categoryName,
+    this.categoryIcon,
+    this.categoryColor,
   });
 
   final int id;
@@ -30,6 +33,9 @@ class TransactionEntry {
   final int categoryId;
   final DateTime timestamp;
   final String? note;
+  final String? categoryName;
+  final String? categoryIcon;
+  final int? categoryColor;
 
   TransactionDraft toDraft() {
     return TransactionDraft(

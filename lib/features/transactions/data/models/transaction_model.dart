@@ -8,6 +8,9 @@ class TransactionModel {
     required this.categoryId,
     required this.timestamp,
     this.note,
+    this.categoryName,
+    this.categoryIcon,
+    this.categoryColor,
   });
 
   factory TransactionModel.fromMap(Map<String, Object?> map) {
@@ -18,6 +21,9 @@ class TransactionModel {
       categoryId: map['category_id'] as int,
       timestamp: map['timestamp'] as int,
       note: map['note'] as String?,
+      categoryName: map['category_name'] as String?,
+      categoryIcon: map['category_icon'] as String?,
+      categoryColor: map['category_color'] as int?,
     );
   }
 
@@ -27,6 +33,9 @@ class TransactionModel {
   final int categoryId;
   final int timestamp;
   final String? note;
+  final String? categoryName;
+  final String? categoryIcon;
+  final int? categoryColor;
 
   TransactionEntry toEntity() {
     return TransactionEntry(
@@ -36,6 +45,9 @@ class TransactionModel {
       categoryId: categoryId,
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp),
       note: note,
+      categoryName: categoryName,
+      categoryIcon: categoryIcon,
+      categoryColor: categoryColor,
     );
   }
 }

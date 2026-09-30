@@ -3,10 +3,12 @@ import 'dart:async';
 import '../../../../core/database/database_helper.dart';
 import '../../domain/entities/cash_flow_summary.dart';
 import '../../domain/entities/transaction_entry.dart';
+import '../../domain/entities/transaction_category.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../../domain/value_objects/transaction_date_filter.dart';
 import '../models/cash_flow_summary_model.dart';
 import '../models/transaction_model.dart';
+import '../models/transaction_category_model.dart';
 
 class SqliteTransactionRepository implements TransactionRepository {
   SqliteTransactionRepository(this._databaseHelper);
@@ -81,6 +83,41 @@ class SqliteTransactionRepository implements TransactionRepository {
     return CashFlowSummaryModel.fromMap(row).toEntity();
   }
 
+  @override
+  Future<CashFlowSummary> getDashboardCashFlow(DateTime activeMonth) async {
+    final range = monthRangeFor(activeMonth);
+    final row = await _databaseHelper.getDashboardSummary(
+      start: range.start,
+      end: range.end,
+    );
+    return CashFlowSummaryModel.fromMap(row).toEntity();
+  }
+
+  @override
+  Future<List<TransactionEntry>> getRecentTransactions({int limit = 5}) async {
+    final rows = await _databaseHelper.getTransactionDetails(limit: limit);
+    return _mapTransactions(rows);
+  }
+
+  @override
+  Future<List<TransactionEntry>> getLedgerTransactions({
+    TransactionType? type,
+  }) async {
+    final rows = await _databaseHelper.getTransactionDetails(
+      type: type?.databaseValue,
+    );
+    return _mapTransactions(rows);
+  }
+
+  @override
+  Future<List<TransactionCategory>> getCategories() async {
+    final rows = await _databaseHelper.getCategories();
+    return rows
+        .map(TransactionCategoryModel.fromMap)
+        .map((model) => model.toEntity())
+        .toList(growable: false);
+  }
+
   void _publishChange() {
     if (!_disposed) _changes.add(++_revision);
   }
@@ -90,5 +127,12 @@ class SqliteTransactionRepository implements TransactionRepository {
     if (_disposed) return;
     _disposed = true;
     unawaited(_changes.close());
+  }
+
+  List<TransactionEntry> _mapTransactions(List<Map<String, Object?>> rows) {
+    return rows
+        .map(TransactionModel.fromMap)
+        .map((model) => model.toEntity())
+        .toList(growable: false);
   }
 }

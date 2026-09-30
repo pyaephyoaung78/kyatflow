@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const databaseName = 'kyatflow.db';
-  static const databaseVersion = 1;
+  static const databaseVersion = 2;
 
   DatabaseFactory? _factory;
   String? _path;
@@ -51,6 +51,7 @@ class DatabaseHelper {
         version: databaseVersion,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
+        onUpgrade: _upgradeSchema,
       ),
     );
   }
@@ -97,6 +98,28 @@ class DatabaseHelper {
       CREATE INDEX idx_transactions_category_timestamp
       ON transactions (category_id, timestamp DESC, id DESC)
     ''');
+    await batch.commit(noResult: true);
+    await _seedDefaultCategories(db);
+  }
+
+  Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) await _seedDefaultCategories(db);
+  }
+
+  Future<void> _seedDefaultCategories(DatabaseExecutor db) async {
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM categories'),
+    );
+    if ((count ?? 0) > 0) return;
+
+    final batch = db.batch();
+    for (final category in _defaultCategories) {
+      batch.insert('categories', category);
+    }
     await batch.commit(noResult: true);
   }
 
@@ -266,6 +289,85 @@ class DatabaseHelper {
     return rows.single;
   }
 
+  /// Returns all-time balance with income and expense totals for [start, end).
+  Future<Map<String, Object?>> getDashboardSummary({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!start.isBefore(end)) {
+      throw ArgumentError('start must be earlier than end');
+    }
+    final rows = await (await database).rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(CASE
+          WHEN type = 'income' THEN amount
+          WHEN type = 'expense' THEN -amount
+          ELSE 0
+        END), 0.0) AS current_balance,
+        COALESCE(SUM(CASE
+          WHEN type = 'income' AND timestamp >= ? AND timestamp < ?
+            THEN amount ELSE 0
+        END), 0.0) AS total_income,
+        COALESCE(SUM(CASE
+          WHEN type = 'expense' AND timestamp >= ? AND timestamp < ?
+            THEN amount ELSE 0
+        END), 0.0) AS total_expense
+      FROM transactions
+      ''',
+      [
+        start.millisecondsSinceEpoch,
+        end.millisecondsSinceEpoch,
+        start.millisecondsSinceEpoch,
+        end.millisecondsSinceEpoch,
+      ],
+    );
+    return rows.single;
+  }
+
+  /// Returns transaction rows enriched with category presentation metadata.
+  Future<List<Map<String, Object?>>> getTransactionDetails({
+    String? type,
+    int? limit,
+  }) async {
+    if (type != null) _validateType(type);
+    if (limit != null && limit <= 0) {
+      throw ArgumentError.value(limit, 'limit', 'Must be positive');
+    }
+    final arguments = <Object?>[];
+    if (type != null) arguments.add(type);
+    if (limit != null) arguments.add(limit);
+    return (await database).rawQuery('''
+      SELECT
+        t.id,
+        t.amount,
+        t.type,
+        t.category_id,
+        t.timestamp,
+        t.note,
+        c.name AS category_name,
+        c.icon AS category_icon,
+        c.color AS category_color
+      FROM transactions AS t
+      INNER JOIN categories AS c ON c.id = t.category_id
+      ${type == null ? '' : 'WHERE t.type = ?'}
+      ORDER BY t.timestamp DESC, t.id DESC
+      ${limit == null ? '' : 'LIMIT ?'}
+      ''', arguments);
+  }
+
+  /// Reads both tables inside one transaction for a consistent backup snapshot.
+  Future<DatabaseBackupSnapshot> getBackupSnapshot() async {
+    return (await database).transaction((txn) async {
+      final categories = await txn.query('categories', orderBy: 'id ASC');
+      final transactions = await txn.query('transactions', orderBy: 'id ASC');
+      return DatabaseBackupSnapshot(
+        categories: categories,
+        transactions: transactions,
+      );
+    });
+  }
+
   /// Replaces editable fields; a null [note] clears an existing note.
   Future<int> updateTransaction({
     required int id,
@@ -361,3 +463,62 @@ class DatabaseHelper {
     }
   }
 }
+
+class DatabaseBackupSnapshot {
+  DatabaseBackupSnapshot({
+    required List<Map<String, Object?>> categories,
+    required List<Map<String, Object?>> transactions,
+  }) : categories = List.unmodifiable(categories),
+       transactions = List.unmodifiable(transactions);
+
+  final List<Map<String, Object?>> categories;
+  final List<Map<String, Object?>> transactions;
+}
+
+const _defaultCategories = <Map<String, Object?>>[
+  {
+    'name': 'Food',
+    'icon': 'restaurant',
+    'color': 0xFFFF9800,
+    'type': 'expense',
+  },
+  {
+    'name': 'Transport',
+    'icon': 'directions_bus',
+    'color': 0xFF2196F3,
+    'type': 'expense',
+  },
+  {
+    'name': 'Shopping',
+    'icon': 'shopping_bag',
+    'color': 0xFF8E5DB7,
+    'type': 'expense',
+  },
+  {
+    'name': 'Bills',
+    'icon': 'receipt_long',
+    'color': 0xFF536DFE,
+    'type': 'expense',
+  },
+  {
+    'name': 'Health',
+    'icon': 'medical_services',
+    'color': 0xFFEF5350,
+    'type': 'expense',
+  },
+  {'name': 'Other', 'icon': 'category', 'color': 0xFF78909C, 'type': 'expense'},
+  {
+    'name': 'Salary',
+    'icon': 'account_balance_wallet',
+    'color': 0xFF43A047,
+    'type': 'income',
+  },
+  {'name': 'Freelance', 'icon': 'work', 'color': 0xFF00897B, 'type': 'income'},
+  {
+    'name': 'Gift',
+    'icon': 'card_giftcard',
+    'color': 0xFFEC407A,
+    'type': 'income',
+  },
+  {'name': 'Other', 'icon': 'savings', 'color': 0xFF7CB342, 'type': 'income'},
+];
