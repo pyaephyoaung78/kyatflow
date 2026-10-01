@@ -54,7 +54,7 @@ class SettingsScreen extends StatelessWidget {
         children: [
           _SettingsRow(
             icon: CupertinoIcons.info_circle,
-            title: 'About KyatFlow',
+            title: 'About Kyat Flow',
             value: 'Version 1.0.0',
           ),
         ],

@@ -27,7 +27,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(dashboardStateProvider);
     return FinancePage(
-      title: 'KyatFlow',
+      title: 'Kyat Flow',
       subtitle: formatMonth(state.activeMonth),
       onRefresh: () => ref.read(dashboardStateProvider.notifier).refresh(),
       trailing: IconButton(

@@ -59,9 +59,9 @@ class CsvBackupService {
     try {
       final shareResult = await _shareInvoker(
         ShareParams(
-          title: 'KyatFlow backup',
-          subject: 'KyatFlow local CSV backup',
-          text: 'KyatFlow local data backup',
+          title: 'Kyat Flow backup',
+          subject: 'Kyat Flow local CSV backup',
+          text: 'Kyat Flow local data backup',
           files: [XFile(file.path, mimeType: 'text/csv')],
           sharePositionOrigin: sharePositionOrigin,
         ),

@@ -1,4 +1,4 @@
-# KyatFlow
+# Kyat Flow
 
 A local-only personal expense tracker built with Flutter, SQLite, and Riverpod.
 All financial data, budgets, recurring rules, analytics, and backups remain

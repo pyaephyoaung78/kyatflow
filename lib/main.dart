@@ -25,7 +25,7 @@ class KyatFlowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KyatFlow',
+      title: 'Kyat Flow',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const MainShellScreen(),

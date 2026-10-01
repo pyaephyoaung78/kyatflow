@@ -22,7 +22,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('KyatFlow'), findsOneWidget);
+    expect(find.text('Kyat Flow'), findsOneWidget);
     expect(find.text('Total balance'), findsOneWidget);
     expect(find.text('MMK 750'), findsOneWidget);
     expect(find.text('Salary'), findsOneWidget);

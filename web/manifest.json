@@ -1,11 +1,11 @@
 {
-    "name": "kyatflow",
-    "short_name": "kyatflow",
+    "name": "Kyat Flow",
+    "short_name": "Kyat Flow",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "theme_color": "#246B55",
+    "description": "A local-first personal finance tracker.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
