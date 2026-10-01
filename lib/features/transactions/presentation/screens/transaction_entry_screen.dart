@@ -1,4 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/finance_widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/transaction_entry.dart';
@@ -33,10 +37,6 @@ class TransactionEntryScreen extends StatefulWidget {
 }
 
 class _TransactionEntryScreenState extends State<TransactionEntryScreen> {
-  static const _expenseColor = Color(0xFFE85D4A);
-  static const _incomeColor = Color(0xFF16866B);
-  static const _surfaceColor = Color(0xFFF5F6F1);
-  static const _inkColor = Color(0xFF17211D);
   static const _maximumExpressionLength = 48;
   static const _maximumOperandDigits = 12;
   static const _maximumFractionDigits = 2;
@@ -85,10 +85,6 @@ class _TransactionEntryScreenState extends State<TransactionEntryScreen> {
         .toList(growable: false);
   }
 
-  Color get _accentColor {
-    return _type == TransactionType.expense ? _expenseColor : _incomeColor;
-  }
-
   _AmountPreview get _preview {
     if (_expression.isEmpty) return const _AmountPreview(value: 0);
     var evaluable = _expression;
@@ -107,140 +103,128 @@ class _TransactionEntryScreenState extends State<TransactionEntryScreen> {
   Widget build(BuildContext context) {
     final preview = _preview;
     return Scaffold(
-      backgroundColor: _surfaceColor,
       appBar: AppBar(
-        backgroundColor: _surfaceColor,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: true,
         title: Text(
           widget.initialTransaction == null
               ? 'New transaction'
               : 'Edit transaction',
-          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         leading: Navigator.canPop(context)
             ? IconButton(
                 tooltip: 'Close',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+                onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+                icon: const Icon(CupertinoIcons.xmark, size: 20),
               )
             : null,
       ),
       body: SafeArea(
         top: false,
-        child: GestureDetector(
-          onTap: FocusScope.of(context).unfocus,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            children: [
-              _TransactionTypeToggle(value: _type, onChanged: _changeType),
-              const SizedBox(height: 24),
-              _AmountPanel(
-                expression: _displayExpression,
-                value: preview.value,
-                calculationError: preview.error,
-                validationError: _amountError,
-                currencyCode: widget.currencyCode,
-                accentColor: _accentColor,
-              ),
-              const SizedBox(height: 24),
-              _SectionLabel(
-                title: 'Category',
-                trailing: '${_availableCategories.length} available',
-              ),
-              const SizedBox(height: 10),
-              _CategorySelector(
-                categories: _availableCategories,
-                selectedId: _selectedCategoryId,
-                emptyMessage: 'Add an ${_type.name} category before saving.',
-                onSelected: (id) {
-                  setState(() {
-                    _selectedCategoryId = id;
-                    _categoryError = null;
-                    _submitError = null;
-                  });
-                },
-              ),
-              if (_categoryError != null) ...[
-                const SizedBox(height: 8),
-                _InlineError(message: _categoryError!),
-              ],
-              const SizedBox(height: 22),
-              Form(
-                key: _formKey,
-                autovalidateMode: _didAttemptSubmit
-                    ? AutovalidateMode.onUserInteraction
-                    : AutovalidateMode.disabled,
-                child: TextFormField(
-                  controller: _noteController,
-                  maxLength: 200,
-                  minLines: 1,
-                  maxLines: 3,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: 'Note (optional)',
-                    hintText: 'What was this for?',
-                    prefixIcon: const Icon(Icons.notes_rounded),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: const BorderSide(color: Color(0xFFE3E7E1)),
-                    ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: AbsorbPointer(
+              absorbing: _isSubmitting,
+              child: GestureDetector(
+                onTap: FocusScope.of(context).unfocus,
+                child: SingleChildScrollView(
+                  key: const PageStorageKey('transaction_entry'),
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
                   ),
-                  validator: (value) {
-                    if ((value?.trim().length ?? 0) > 200) {
-                      return 'Keep the note under 200 characters';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-              _Keypad(onKeyPressed: _handleKeypadInput),
-              if (_submitError != null) ...[
-                const SizedBox(height: 14),
-                _InlineError(message: _submitError!),
-              ],
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                key: const ValueKey('save_transaction'),
-                onPressed: _isSubmitting ? null : _submit,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                  backgroundColor: _accentColor,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: _accentColor.withValues(alpha: 0.45),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-                icon: _isSubmitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FinanceSegments<TransactionType>(
+                        value: _type,
+                        labels: const {
+                          TransactionType.expense: 'Expense',
+                          TransactionType.income: 'Income',
+                        },
+                        onChanged: _changeType,
+                        keyPrefix: 'type',
+                      ),
+                      _AmountPanel(
+                        expression: _displayExpression,
+                        value: preview.value,
+                        error: _amountError ?? preview.error,
+                        currencyCode: widget.currencyCode,
+                      ),
+                      const Text('Category', style: AppTheme.caption),
+                      const SizedBox(height: 8),
+                      _CategorySelector(
+                        categories: _availableCategories,
+                        selectedId: _selectedCategoryId,
+                        emptyMessage:
+                            'Add an ${_type.name} category before saving.',
+                        onSelected: (id) {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            _selectedCategoryId = id;
+                            _categoryError = null;
+                            _submitError = null;
+                          });
+                        },
+                      ),
+                      if (_categoryError != null) ...[
+                        const SizedBox(height: 6),
+                        _InlineError(message: _categoryError!),
+                      ],
+                      const SizedBox(height: 16),
+                      Form(
+                        key: _formKey,
+                        autovalidateMode: _didAttemptSubmit
+                            ? AutovalidateMode.onUserInteraction
+                            : AutovalidateMode.disabled,
+                        child: TextFormField(
+                          controller: _noteController,
+                          maxLength: 200,
+                          minLines: 1,
+                          maxLines: 3,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: const TextStyle(fontSize: 15),
+                          decoration: const InputDecoration(
+                            hintText: 'Note (optional)',
+                            counterText: '',
+                            prefixIcon: Icon(
+                              CupertinoIcons.text_alignleft,
+                              size: 19,
+                            ),
+                          ),
+                          validator: (value) =>
+                              (value?.trim().length ?? 0) > 200
+                              ? 'Keep the note under 200 characters'
+                              : null,
                         ),
-                      )
-                    : const Icon(Icons.check_rounded),
-                label: Text(
-                  _isSubmitting
-                      ? 'Saving…'
-                      : widget.initialTransaction == null
-                      ? 'Save transaction'
-                      : 'Update transaction',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                      ),
+                      const SizedBox(height: 16),
+                      _Keypad(onKeyPressed: _handleKeypadInput),
+                      if (_submitError != null) ...[
+                        const SizedBox(height: 12),
+                        _InlineError(message: _submitError!),
+                      ],
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        key: const ValueKey('save_transaction'),
+                        onPressed: _isSubmitting ? null : _submit,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: _isSubmitting
+                              ? const CupertinoActivityIndicator(
+                                  color: Colors.white,
+                                )
+                              : Text(
+                                  widget.initialTransaction == null
+                                      ? 'Save transaction'
+                                      : 'Update transaction',
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -257,6 +241,7 @@ class _TransactionEntryScreenState extends State<TransactionEntryScreen> {
 
   void _changeType(TransactionType type) {
     if (_type == type) return;
+    HapticFeedback.selectionClick();
     setState(() {
       _type = type;
       _selectedCategoryId = null;
@@ -266,6 +251,7 @@ class _TransactionEntryScreenState extends State<TransactionEntryScreen> {
   }
 
   void _handleKeypadInput(String key) {
+    HapticFeedback.selectionClick();
     FocusScope.of(context).unfocus();
     setState(() {
       _amountError = null;
@@ -410,13 +396,14 @@ class RiverpodTransactionEntryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the auto-disposed notifier alive until this form is closed.
+    final notifier = ref.watch(transactionStateProvider.notifier);
     return TransactionEntryScreen(
       categories: categories,
       initialTransaction: initialTransaction,
       currencyCode: currencyCode,
       onSaved: onSaved,
       onSubmit: (draft) async {
-        final notifier = ref.read(transactionStateProvider.notifier);
         final initial = initialTransaction;
         if (initial == null) {
           await notifier.add(draft);
@@ -437,244 +424,59 @@ class RiverpodTransactionEntryScreen extends ConsumerWidget {
   }
 }
 
-class _TransactionTypeToggle extends StatelessWidget {
-  const _TransactionTypeToggle({required this.value, required this.onChanged});
-
-  final TransactionType value;
-  final ValueChanged<TransactionType> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = value == TransactionType.expense
-        ? _TransactionEntryScreenState._expenseColor
-        : _TransactionEntryScreenState._incomeColor;
-    return Container(
-      height: 54,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE6E9E4),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            children: [
-              AnimatedAlign(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                alignment: value == TransactionType.expense
-                    ? Alignment.centerLeft
-                    : Alignment.centerRight,
-                child: Container(
-                  width: constraints.maxWidth / 2,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x16000000),
-                        blurRadius: 12,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  _TypeOption(
-                    label: 'Expense',
-                    icon: Icons.arrow_upward_rounded,
-                    selected: value == TransactionType.expense,
-                    color: color,
-                    onTap: () => onChanged(TransactionType.expense),
-                  ),
-                  _TypeOption(
-                    label: 'Income',
-                    icon: Icons.arrow_downward_rounded,
-                    selected: value == TransactionType.income,
-                    color: color,
-                    onTap: () => onChanged(TransactionType.income),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TypeOption extends StatelessWidget {
-  const _TypeOption({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        child: InkWell(
-          key: ValueKey('type_${label.toLowerCase()}'),
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: selected ? color : Colors.black45),
-                const SizedBox(width: 7),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected
-                        ? _TransactionEntryScreenState._inkColor
-                        : Colors.black54,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AmountPanel extends StatelessWidget {
   const _AmountPanel({
     required this.expression,
     required this.value,
-    required this.calculationError,
-    required this.validationError,
+    required this.error,
     required this.currencyCode,
-    required this.accentColor,
   });
-
   final String expression;
   final double value;
-  final String? calculationError;
-  final String? validationError;
+  final String? error;
   final String currencyCode;
-  final Color accentColor;
-
   @override
-  Widget build(BuildContext context) {
-    final error = validationError ?? calculationError;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: error == null
-              ? const Color(0xFFE1E6DF)
-              : const Color(0xFFD7443E),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 24),
+    child: Column(
+      children: [
+        Text(
+          expression,
+          key: const ValueKey('amount_expression'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTheme.caption,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: Text(
-              expression,
-              key: const ValueKey('amount_expression'),
-              maxLines: 1,
-              overflow: TextOverflow.fade,
-              textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.black45, fontSize: 16),
-            ),
-          ),
-          const SizedBox(height: 7),
-          FittedBox(
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
             child: Text(
               '$currencyCode ${_formatMoney(value)}',
               key: const ValueKey('amount_total'),
-              style: TextStyle(
-                color: _TransactionEntryScreenState._inkColor,
-                fontSize: 38,
-                height: 1.1,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.2,
+              style: const TextStyle(
+                fontSize: 42,
+                height: 1.2,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -1.8,
+                color: AppTheme.ink,
+                fontFeatures: AppTheme.numbers,
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: error == null
-                ? Row(
-                    key: const ValueKey('calculation_ready'),
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Icon(
-                        Icons.calculate_outlined,
-                        size: 16,
-                        color: accentColor,
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        'Calculated before saving',
-                        style: TextStyle(fontSize: 12, color: Colors.black45),
-                      ),
-                    ],
-                  )
-                : Text(
-                    error,
-                    key: ValueKey(error),
-                    style: const TextStyle(
-                      color: Color(0xFFD7443E),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppTheme.expense, fontSize: 13),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.title, required this.trailing});
-
-  final String title;
-  final String trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-        Text(
-          trailing,
-          style: const TextStyle(fontSize: 12, color: Colors.black45),
-        ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _CategorySelector extends StatelessWidget {
@@ -684,65 +486,55 @@ class _CategorySelector extends StatelessWidget {
     required this.emptyMessage,
     required this.onSelected,
   });
-
   final List<TransactionCategoryOption> categories;
   final int? selectedId;
   final String emptyMessage;
   final ValueChanged<int> onSelected;
-
   @override
   Widget build(BuildContext context) {
-    if (categories.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF4E6),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline_rounded, color: Color(0xFF9A6418)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(emptyMessage)),
-          ],
-        ),
-      );
-    }
+    if (categories.isEmpty) return Text(emptyMessage, style: AppTheme.caption);
+    final height = MediaQuery.textScalerOf(context).scale(14) + 32;
     return SizedBox(
-      height: 48,
+      height: height,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         itemCount: categories.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final category = categories[index];
-          final selected = category.id == selectedId;
-          return ChoiceChip(
-            key: ValueKey('category_${category.id}'),
+          final item = categories[index];
+          final selected = item.id == selectedId;
+          return Semantics(
             selected: selected,
-            showCheckmark: false,
-            onSelected: (_) => onSelected(category.id),
-            avatar: Icon(
-              category.icon,
-              size: 18,
-              color: selected ? category.color : Colors.black54,
-            ),
-            label: Text(category.name),
-            labelStyle: TextStyle(
-              color: selected
-                  ? _TransactionEntryScreenState._inkColor
-                  : Colors.black54,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            ),
-            selectedColor: category.color.withValues(alpha: 0.16),
-            backgroundColor: Colors.white,
-            side: BorderSide(
-              color: selected
-                  ? category.color.withValues(alpha: 0.75)
-                  : const Color(0xFFE1E6DF),
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+            child: AnimatedContainer(
+              duration: AppTheme.motion(context, 180),
+              decoration: BoxDecoration(
+                color: selected ? AppTheme.accent : AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: CupertinoButton(
+                key: ValueKey('category_${item.id}'),
+                onPressed: () => onSelected(item.id),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 18,
+                      color: selected ? Colors.white : AppTheme.secondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: selected ? Colors.white : AppTheme.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         },
@@ -753,112 +545,93 @@ class _CategorySelector extends StatelessWidget {
 
 class _Keypad extends StatelessWidget {
   const _Keypad({required this.onKeyPressed});
-
-  static const _keys = [
-    _KeyData('7'),
-    _KeyData('8'),
-    _KeyData('9'),
-    _KeyData('÷', operator: true, semantics: 'Divide'),
-    _KeyData('4'),
-    _KeyData('5'),
-    _KeyData('6'),
-    _KeyData('×', operator: true, semantics: 'Multiply'),
-    _KeyData('1'),
-    _KeyData('2'),
-    _KeyData('3'),
-    _KeyData('-', operator: true, semantics: 'Subtract'),
-    _KeyData('.'),
-    _KeyData('0'),
-    _KeyData('backspace', semantics: 'Backspace'),
-    _KeyData('+', operator: true, semantics: 'Add'),
-  ];
-
   final ValueChanged<String> onKeyPressed;
-
+  static const _keys = [
+    '7',
+    '8',
+    '9',
+    '÷',
+    '4',
+    '5',
+    '6',
+    '×',
+    '1',
+    '2',
+    '3',
+    '-',
+    '.',
+    '0',
+    'backspace',
+    '+',
+  ];
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final keyWidth = (constraints.maxWidth - 24) / 4;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _keys
-              .map((data) {
-                return SizedBox(
-                  width: keyWidth,
-                  height: keyWidth / 1.35,
-                  child: Semantics(
-                    button: true,
-                    label: data.semantics ?? data.value,
-                    child: Material(
-                      color: data.operator
-                          ? const Color(0xFFE5ECE7)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      child: InkWell(
-                        key: ValueKey('keypad_${data.value}'),
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () => onKeyPressed(data.value),
-                        child: Center(
-                          child: data.value == 'backspace'
-                              ? const Icon(Icons.backspace_outlined, size: 23)
-                              : Text(
-                                  data.value,
-                                  style: TextStyle(
-                                    color:
-                                        _TransactionEntryScreenState._inkColor,
-                                    fontSize: data.operator ? 25 : 23,
-                                    fontWeight: data.operator
-                                        ? FontWeight.w700
-                                        : FontWeight.w600,
-                                  ),
-                                ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = (constraints.maxWidth - 18) / 4;
+      final height = (MediaQuery.textScalerOf(context).scale(25) + 22).clamp(
+        52.0,
+        88.0,
+      );
+      return Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (var index = 0; index < _keys.length; index++)
+            SizedBox(
+              width: width,
+              height: height,
+              child: CupertinoButton(
+                key: ValueKey('keypad_${_keys[index]}'),
+                padding: EdgeInsets.zero,
+                color: index % 4 == 3 ? AppTheme.accentSoft : AppTheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                onPressed: () => onKeyPressed(_keys[index]),
+                child: Semantics(
+                  label: switch (_keys[index]) {
+                    '÷' => 'Divide',
+                    '×' => 'Multiply',
+                    '-' => 'Subtract',
+                    '+' => 'Add',
+                    'backspace' => 'Backspace',
+                    _ => _keys[index],
+                  },
+                  excludeSemantics: true,
+                  child: _keys[index] == 'backspace'
+                      ? const Icon(
+                          CupertinoIcons.delete_left,
+                          size: 23,
+                          color: AppTheme.ink,
+                        )
+                      : Text(
+                          _keys[index],
+                          style: TextStyle(
+                            fontSize: 25,
+                            fontWeight: FontWeight.w400,
+                            color: index % 4 == 3
+                                ? AppTheme.accent
+                                : AppTheme.ink,
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                );
-              })
-              .toList(growable: false),
-        );
-      },
-    );
-  }
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 class _InlineError extends StatelessWidget {
   const _InlineError({required this.message});
-
   final String message;
-
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(
-          Icons.error_outline_rounded,
-          size: 17,
-          color: Color(0xFFD7443E),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(color: Color(0xFFD7443E), fontSize: 12),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _KeyData {
-  const _KeyData(this.value, {this.operator = false, this.semantics});
-
-  final String value;
-  final bool operator;
-  final String? semantics;
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Text(
+      message,
+      style: const TextStyle(color: AppTheme.expense, fontSize: 13),
+    ),
+  );
 }
 
 class _AmountPreview {

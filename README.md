@@ -9,6 +9,8 @@ on the device.
 ```text
 lib/
   core/database/database_helper.dart
+  core/theme/             # Shared colors, typography, control themes and motion
+  core/widgets/           # Page layout, grouped surfaces, filters and routes
   features/budgets/       # Budget domain, SQLite repository, providers, widgets
   features/recurring/     # Local recurring transaction execution service
   features/transactions/
@@ -17,6 +19,28 @@ lib/
     presentation/         # Riverpod state and app screens
   main.dart
 ```
+
+## Interface
+
+The interface uses quiet grouped surfaces, large titles, a restrained green
+accent, Cupertino controls, and consistent spacing. Home, Analytics, History,
+Settings, transaction entry, and budget progress share the same design tokens.
+Tab changes preserve each screen's scroll position. Entry opens with a native
+modal transition; custom motion respects the system's reduced-animation setting.
+
+`test/ui_design_test.dart` exercises navigation, filters, transaction editing
+and saving, empty states, narrow/landscape screens, and double-sized text with
+the keyboard open. Run it with `flutter test test/ui_design_test.dart`.
+To also render sample-data previews into the ignored `build/ui-previews/` folder:
+
+```bash
+flutter test test/ui_design_test.dart \
+  --dart-define=CAPTURE_DESIGN=true \
+  --dart-define=FLUTTER_FONT_DIRECTORY=/absolute/path/to/flutter/bin/cache/artifacts/material_fonts
+```
+
+These previews load local test fonts; verify platform typography, gestures,
+and haptics on a physical device with `flutter run` before shipping.
 
 ## Local database
 

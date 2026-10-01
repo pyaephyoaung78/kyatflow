@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-
+import 'package:flutter/cupertino.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/transaction_entry.dart';
 import '../utils/category_icon_mapper.dart';
 import '../utils/finance_formatters.dart';
@@ -11,38 +11,48 @@ class TransactionListTile extends StatelessWidget {
     this.showDate = false,
     this.onTap,
   });
-
   final TransactionEntry transaction;
   final bool showDate;
   final VoidCallback? onTap;
-
   @override
   Widget build(BuildContext context) {
-    final isIncome = transaction.type == TransactionType.income;
-    final color = isIncome ? const Color(0xFF16866B) : const Color(0xFFE85D4A);
-    final categoryColor = Color(transaction.categoryColor ?? 0xFF78909C);
+    final income = transaction.type == TransactionType.income;
     final note = transaction.note?.trim();
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          child: Row(
+    final subtitle = note == null || note.isEmpty
+        ? showDate
+              ? formatShortDate(transaction.timestamp)
+              : formatTransactionTime(transaction.timestamp)
+        : note;
+    final amount = Text(
+      '${income ? '+' : '−'}${formatMoney(transaction.amount)}',
+      style: TextStyle(
+        color: income ? AppTheme.accent : AppTheme.ink,
+        fontWeight: FontWeight.w600,
+        fontSize: 15,
+        fontFeatures: AppTheme.numbers,
+      ),
+    );
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              constraints.maxWidth < 290 ||
+              MediaQuery.textScalerOf(context).scale(14) > 20;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: categoryColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   categoryIconFromKey(transaction.categoryIcon),
-                  color: categoryColor,
-                  size: 22,
+                  color: AppTheme.ink,
+                  size: 20,
                 ),
               ),
               const SizedBox(width: 12),
@@ -55,54 +65,51 @@ class TransactionListTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w700,
                         fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      note == null || note.isEmpty
-                          ? showDate
-                                ? formatShortDate(transaction.timestamp)
-                                : formatTransactionTime(transaction.timestamp)
-                          : note,
+                      subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black45,
-                        fontSize: 12,
-                      ),
+                      style: AppTheme.caption,
                     ),
+                    if (stacked) ...[const SizedBox(height: 6), amount],
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${isIncome ? '+' : '-'}${formatMoney(transaction.amount)}',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                    ),
+              if (!stacked) ...[
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      FittedBox(fit: BoxFit.scaleDown, child: amount),
+                      if (showDate) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          formatShortDate(transaction.timestamp),
+                          style: AppTheme.caption,
+                        ),
+                      ],
+                    ],
                   ),
-                  if (showDate) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      formatTransactionTime(transaction.timestamp),
-                      style: const TextStyle(
-                        color: Colors.black38,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ],
-          ),
-        ),
+          );
+        },
+      ),
+    );
+    if (onTap == null) return content;
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: AppTheme.ink),
+        child: content,
       ),
     );
   }

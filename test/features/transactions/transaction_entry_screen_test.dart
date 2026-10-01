@@ -105,7 +105,10 @@ void main() {
 
     expect(find.text('Food'), findsNothing);
     expect(find.text('Salary'), findsOneWidget);
-    expect(find.byType(AnimatedAlign), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('type_expense')));
+    await tester.pumpAndSettle();
+    expect(find.text('Food'), findsOneWidget);
+    expect(find.text('Salary'), findsNothing);
   });
 
   testWidgets('validates amount, category, and division by zero', (

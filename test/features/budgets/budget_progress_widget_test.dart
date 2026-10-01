@@ -33,6 +33,7 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
     expect(find.text('Food'), findsOneWidget);
     expect(find.text('MMK 250 of MMK 200'), findsOneWidget);
     expect(find.text('125%'), findsOneWidget);

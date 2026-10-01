@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/database/database_helper.dart';
+import 'core/theme/app_theme.dart';
 import 'features/recurring/data/services/recurring_transaction_service.dart';
 import 'features/transactions/presentation/screens/main_shell_screen.dart';
 
@@ -26,21 +27,7 @@ class KyatFlowApp extends StatelessWidget {
     return MaterialApp(
       title: 'KyatFlow',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E6755),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF5F6F1),
-        fontFamily: 'sans-serif',
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Colors.white,
-          indicatorColor: Color(0xFFDCEAE4),
-          height: 72,
-          elevation: 0,
-        ),
-      ),
+      theme: AppTheme.light,
       home: const MainShellScreen(),
     );
   }
