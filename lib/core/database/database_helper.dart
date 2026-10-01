@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const databaseName = 'kyatflow.db';
-  static const databaseVersion = 2;
+  static const databaseVersion = 3;
 
   DatabaseFactory? _factory;
   String? _path;
@@ -98,6 +98,7 @@ class DatabaseHelper {
       CREATE INDEX idx_transactions_category_timestamp
       ON transactions (category_id, timestamp DESC, id DESC)
     ''');
+    _createBudgetingTables(batch);
     await batch.commit(noResult: true);
     await _seedDefaultCategories(db);
   }
@@ -108,6 +109,54 @@ class DatabaseHelper {
     int newVersion,
   ) async {
     if (oldVersion < 2) await _seedDefaultCategories(db);
+    if (oldVersion < 3) {
+      final batch = db.batch();
+      _createBudgetingTables(batch);
+      await batch.commit(noResult: true);
+    }
+  }
+
+  void _createBudgetingTables(Batch batch) {
+    batch.execute('''
+      CREATE TABLE budgets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL,
+        amount_limit REAL NOT NULL CHECK (amount_limit > 0),
+        month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+        year INTEGER NOT NULL CHECK (year BETWEEN 1 AND 9999),
+        alert_percentage REAL NOT NULL DEFAULT 80
+          CHECK (alert_percentage > 0 AND alert_percentage <= 100),
+        FOREIGN KEY (category_id) REFERENCES categories (id)
+          ON UPDATE RESTRICT ON DELETE RESTRICT,
+        UNIQUE (category_id, month, year)
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX idx_budgets_year_month_category
+      ON budgets (year, month, category_id)
+    ''');
+    batch.execute('''
+      CREATE TABLE recurring_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        amount REAL NOT NULL CHECK (amount > 0),
+        category_id INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+        frequency TEXT NOT NULL
+          CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
+        last_executed INTEGER,
+        FOREIGN KEY (category_id, type) REFERENCES categories (id, type)
+          ON UPDATE RESTRICT ON DELETE RESTRICT
+      )
+    ''');
+    batch.execute('''
+      CREATE INDEX idx_recurring_rules_last_executed
+      ON recurring_rules (last_executed, id)
+    ''');
+    batch.execute('''
+      CREATE INDEX idx_recurring_rules_category
+      ON recurring_rules (category_id, id)
+    ''');
   }
 
   Future<void> _seedDefaultCategories(DatabaseExecutor db) async {
@@ -383,14 +432,180 @@ class DatabaseHelper {
     );
   }
 
-  /// Reads both tables inside one transaction for a consistent backup snapshot.
+  Future<int> insertBudget({
+    required int categoryId,
+    required double amountLimit,
+    required int month,
+    required int year,
+    double alertPercentage = 80,
+  }) async {
+    final values = _budgetValues(
+      categoryId,
+      amountLimit,
+      month,
+      year,
+      alertPercentage,
+    );
+    return (await database).transaction((txn) async {
+      await _requireExpenseCategory(txn, categoryId);
+      return txn.insert('budgets', values);
+    });
+  }
+
+  Future<int> updateBudget({
+    required int id,
+    required int categoryId,
+    required double amountLimit,
+    required int month,
+    required int year,
+    required double alertPercentage,
+  }) async {
+    final values = _budgetValues(
+      categoryId,
+      amountLimit,
+      month,
+      year,
+      alertPercentage,
+    );
+    return (await database).transaction((txn) async {
+      await _requireExpenseCategory(txn, categoryId);
+      return txn.update('budgets', values, where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<int> deleteBudget(int id) async {
+    return (await database).delete('budgets', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Compares budget limits with expense transactions for one calendar month.
+  Future<List<Map<String, Object?>>> getBudgetProgress({
+    required int month,
+    required int year,
+  }) async {
+    _validateMonthAndYear(month, year);
+    final start = DateTime(year, month);
+    final end = DateTime(year, month + 1);
+    return (await database).rawQuery(
+      '''
+      WITH spending AS (
+        SELECT
+          b.id,
+          b.category_id,
+          b.amount_limit,
+          b.month,
+          b.year,
+          b.alert_percentage,
+          c.name AS category_name,
+          c.icon AS category_icon,
+          c.color AS category_color,
+          COALESCE(SUM(t.amount), 0.0) AS actual_spent
+        FROM budgets AS b
+        INNER JOIN categories AS c
+          ON c.id = b.category_id AND c.type = 'expense'
+        LEFT JOIN transactions AS t
+          ON t.category_id = b.category_id
+          AND t.type = 'expense'
+          AND t.timestamp >= ?
+          AND t.timestamp < ?
+        WHERE b.year = ? AND b.month = ?
+        GROUP BY
+          b.id,
+          b.category_id,
+          b.amount_limit,
+          b.month,
+          b.year,
+          b.alert_percentage,
+          c.name,
+          c.icon,
+          c.color
+      )
+      SELECT
+        *,
+        (actual_spent / amount_limit) * 100.0 AS progress_percentage,
+        CASE
+          WHEN actual_spent > amount_limit THEN 'exceeded'
+          WHEN actual_spent >= amount_limit * alert_percentage / 100.0
+            THEN 'warning'
+          ELSE 'safe'
+        END AS warning_state
+      FROM spending
+      ORDER BY progress_percentage DESC, category_name ASC
+      ''',
+      [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch, year, month],
+    );
+  }
+
+  Future<int> insertRecurringRule({
+    required String name,
+    required double amount,
+    required int categoryId,
+    required String type,
+    required String frequency,
+    DateTime? lastExecuted,
+  }) async {
+    final values = _recurringRuleValues(
+      name,
+      amount,
+      categoryId,
+      type,
+      frequency,
+      lastExecuted,
+    );
+    return (await database).insert('recurring_rules', values);
+  }
+
+  Future<int> updateRecurringRule({
+    required int id,
+    required String name,
+    required double amount,
+    required int categoryId,
+    required String type,
+    required String frequency,
+    DateTime? lastExecuted,
+  }) async {
+    final values = _recurringRuleValues(
+      name,
+      amount,
+      categoryId,
+      type,
+      frequency,
+      lastExecuted,
+    );
+    return (await database).update(
+      'recurring_rules',
+      values,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<Map<String, Object?>>> getRecurringRules() async {
+    return (await database).query('recurring_rules', orderBy: 'id ASC');
+  }
+
+  Future<int> deleteRecurringRule(int id) async {
+    return (await database).delete(
+      'recurring_rules',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Reads all local tables inside one transaction for a consistent snapshot.
   Future<DatabaseBackupSnapshot> getBackupSnapshot() async {
     return (await database).transaction((txn) async {
       final categories = await txn.query('categories', orderBy: 'id ASC');
       final transactions = await txn.query('transactions', orderBy: 'id ASC');
+      final budgets = await txn.query('budgets', orderBy: 'id ASC');
+      final recurringRules = await txn.query(
+        'recurring_rules',
+        orderBy: 'id ASC',
+      );
       return DatabaseBackupSnapshot(
         categories: categories,
         transactions: transactions,
+        budgets: budgets,
+        recurringRules: recurringRules,
       );
     });
   }
@@ -484,6 +699,109 @@ class DatabaseHelper {
     };
   }
 
+  Map<String, Object?> _budgetValues(
+    int categoryId,
+    double amountLimit,
+    int month,
+    int year,
+    double alertPercentage,
+  ) {
+    if (!amountLimit.isFinite || amountLimit <= 0) {
+      throw ArgumentError.value(
+        amountLimit,
+        'amountLimit',
+        'Must be finite and positive',
+      );
+    }
+    if (!alertPercentage.isFinite ||
+        alertPercentage <= 0 ||
+        alertPercentage > 100) {
+      throw ArgumentError.value(
+        alertPercentage,
+        'alertPercentage',
+        'Must be greater than 0 and at most 100',
+      );
+    }
+    _validateMonthAndYear(month, year);
+    return {
+      'category_id': categoryId,
+      'amount_limit': amountLimit,
+      'month': month,
+      'year': year,
+      'alert_percentage': alertPercentage,
+    };
+  }
+
+  Future<void> _requireExpenseCategory(
+    DatabaseExecutor db,
+    int categoryId,
+  ) async {
+    final rows = await db.query(
+      'categories',
+      columns: ['type'],
+      where: 'id = ?',
+      whereArgs: [categoryId],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.single['type'] != 'expense') {
+      throw ArgumentError.value(
+        categoryId,
+        'categoryId',
+        'Budgets require an existing expense category',
+      );
+    }
+  }
+
+  Map<String, Object?> _recurringRuleValues(
+    String name,
+    double amount,
+    int categoryId,
+    String type,
+    String frequency,
+    DateTime? lastExecuted,
+  ) {
+    _validateType(type);
+    _validateFrequency(frequency);
+    if (name.trim().isEmpty) {
+      throw ArgumentError.value(name, 'name', 'Must not be empty');
+    }
+    if (!amount.isFinite || amount <= 0) {
+      throw ArgumentError.value(
+        amount,
+        'amount',
+        'Must be finite and positive',
+      );
+    }
+    return {
+      'name': name.trim(),
+      'amount': amount,
+      'category_id': categoryId,
+      'type': type,
+      'frequency': frequency,
+      'last_executed': lastExecuted?.millisecondsSinceEpoch,
+    };
+  }
+
+  void _validateMonthAndYear(int month, int year) {
+    if (month < 1 || month > 12) {
+      throw ArgumentError.value(month, 'month', 'Must be between 1 and 12');
+    }
+    if (year < 1 || year > 9999) {
+      throw ArgumentError.value(year, 'year', 'Must be between 1 and 9999');
+    }
+  }
+
+  void _validateFrequency(String frequency) {
+    const frequencies = {'daily', 'weekly', 'monthly', 'yearly'};
+    if (!frequencies.contains(frequency)) {
+      throw ArgumentError.value(
+        frequency,
+        'frequency',
+        'Must be daily, weekly, monthly, or yearly',
+      );
+    }
+  }
+
   void _validateType(String type) {
     if (type != 'income' && type != 'expense') {
       throw ArgumentError.value(type, 'type', 'Must be income or expense');
@@ -495,11 +813,17 @@ class DatabaseBackupSnapshot {
   DatabaseBackupSnapshot({
     required List<Map<String, Object?>> categories,
     required List<Map<String, Object?>> transactions,
+    required List<Map<String, Object?>> budgets,
+    required List<Map<String, Object?>> recurringRules,
   }) : categories = List.unmodifiable(categories),
-       transactions = List.unmodifiable(transactions);
+       transactions = List.unmodifiable(transactions),
+       budgets = List.unmodifiable(budgets),
+       recurringRules = List.unmodifiable(recurringRules);
 
   final List<Map<String, Object?>> categories;
   final List<Map<String, Object?>> transactions;
+  final List<Map<String, Object?>> budgets;
+  final List<Map<String, Object?>> recurringRules;
 }
 
 const _defaultCategories = <Map<String, Object?>>[

@@ -109,42 +109,84 @@ class CsvBackupEncoder {
     'timestamp_epoch_ms',
     'timestamp_iso8601',
     'note',
+    'amount_limit',
+    'month',
+    'year',
+    'alert_percentage',
+    'frequency',
+    'last_executed_epoch_ms',
+    'last_executed_iso8601',
   ];
 
   String encode(DatabaseBackupSnapshot snapshot) {
     final rows = <List<Object?>>[_columns];
     for (final category in snapshot.categories) {
-      rows.add([
-        'category',
-        category['id'],
-        category['name'],
-        category['icon'],
-        category['color'],
-        category['type'],
-        null,
-        null,
-        null,
-        null,
-        null,
-      ]);
+      rows.add(
+        _row({
+          'record_type': 'category',
+          'id': category['id'],
+          'name': category['name'],
+          'icon': category['icon'],
+          'color': category['color'],
+          'type': category['type'],
+        }),
+      );
     }
     for (final transaction in snapshot.transactions) {
       final timestamp = transaction['timestamp'] as int;
-      rows.add([
-        'transaction',
-        transaction['id'],
-        null,
-        null,
-        null,
-        transaction['type'],
-        transaction['amount'],
-        transaction['category_id'],
-        timestamp,
-        DateTime.fromMillisecondsSinceEpoch(timestamp).toIso8601String(),
-        transaction['note'],
-      ]);
+      rows.add(
+        _row({
+          'record_type': 'transaction',
+          'id': transaction['id'],
+          'type': transaction['type'],
+          'amount': transaction['amount'],
+          'category_id': transaction['category_id'],
+          'timestamp_epoch_ms': timestamp,
+          'timestamp_iso8601': _iso8601(timestamp),
+          'note': transaction['note'],
+        }),
+      );
+    }
+    for (final budget in snapshot.budgets) {
+      rows.add(
+        _row({
+          'record_type': 'budget',
+          'id': budget['id'],
+          'category_id': budget['category_id'],
+          'amount_limit': budget['amount_limit'],
+          'month': budget['month'],
+          'year': budget['year'],
+          'alert_percentage': budget['alert_percentage'],
+        }),
+      );
+    }
+    for (final rule in snapshot.recurringRules) {
+      final lastExecuted = rule['last_executed'] as int?;
+      rows.add(
+        _row({
+          'record_type': 'recurring_rule',
+          'id': rule['id'],
+          'name': rule['name'],
+          'type': rule['type'],
+          'amount': rule['amount'],
+          'category_id': rule['category_id'],
+          'frequency': rule['frequency'],
+          'last_executed_epoch_ms': lastExecuted,
+          'last_executed_iso8601': lastExecuted == null
+              ? null
+              : _iso8601(lastExecuted),
+        }),
+      );
     }
     return rows.map(_encodeRow).join('\r\n');
+  }
+
+  List<Object?> _row(Map<String, Object?> values) {
+    return _columns.map((column) => values[column]).toList(growable: false);
+  }
+
+  String _iso8601(int milliseconds) {
+    return DateTime.fromMillisecondsSinceEpoch(milliseconds).toIso8601String();
   }
 
   String _encodeRow(List<Object?> row) => row.map(_encodeCell).join(',');

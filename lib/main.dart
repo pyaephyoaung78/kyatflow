@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/database/database_helper.dart';
+import 'features/recurring/data/services/recurring_transaction_service.dart';
 import 'features/transactions/presentation/screens/main_shell_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await RecurringTransactionService(
+      databaseHelper: DatabaseHelper.instance,
+    ).executeDueTransactions();
+  } catch (error, stackTrace) {
+    debugPrint('Recurring transaction check failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
   runApp(const ProviderScope(child: KyatFlowApp()));
 }
 

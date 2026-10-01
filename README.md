@@ -1,18 +1,20 @@
 # KyatFlow
 
 A local-only personal expense tracker built with Flutter, SQLite, and Riverpod.
-The project currently includes the persistence, repository, and transaction
-state-management layers; screens come next.
+All financial data, budgets, recurring rules, analytics, and backups remain
+on the device.
 
 ## Structure
 
 ```text
 lib/
   core/database/database_helper.dart
+  features/budgets/       # Budget domain, SQLite repository, providers, widgets
+  features/recurring/     # Local recurring transaction execution service
   features/transactions/
-    data/           # SQLite row models and repository implementation
-    domain/         # Entities, date filters, repository contract
-    presentation/   # Riverpod providers and immutable transaction state
+    data/                 # SQLite row models and repository implementation
+    domain/               # Entities, date filters, repository contract
+    presentation/         # Riverpod state and app screens
   main.dart
 ```
 
@@ -54,7 +56,7 @@ Future<void> saveExampleExpense() async {
 }
 ```
 
-Both tables have insert, single-row read, list, update, and delete methods.
+Categories and transactions have insert, single-row read, list, update, and delete methods.
 Inserts return IDs; updates/deletes return affected row counts; missing single
 rows return null. Updates replace all editable fields; omitted notes become null.
 Invalid input throws `ArgumentError`; SQLite constraint failures propagate as
@@ -63,6 +65,9 @@ Invalid input throws `ArgumentError`; SQLite constraint failures propagate as
 - `categories`: integer ID, text name, text icon key, integer ARGB color, text type.
 - `transactions`: integer ID, REAL amount, text type, integer category ID,
   integer epoch-millisecond timestamp, nullable text note.
+- `budgets`: category, positive monthly limit, month/year, and warning percentage.
+- `recurring_rules`: name, amount, category/type, daily/weekly/monthly/yearly
+  frequency, and nullable last-executed timestamp.
 - Types are `income` and `expense`; amounts must be finite and positive.
 - Foreign keys require a category of the same type. Referenced categories cannot
   be deleted or have their type changed until their transactions are reassigned
@@ -71,9 +76,8 @@ Invalid input throws `ArgumentError`; SQLite constraint failures propagate as
   with ID as the tie-breaker. Indexes cover date, type/date, category/date, and
   category type/name queries. IDs are indexed by their primary keys.
 - Amount uses REAL as requested, so it has floating-point precision limits.
-- Schema version is 2. The version-2 data migration adds default local
-  categories only when the category table is empty; existing categories and
-  transactions remain untouched.
+- Schema version is 3. The version-3 migration adds budget and recurring-rule
+  tables without rewriting existing categories or transactions.
 - Call `close()` only when all database operations are idle, not on each screen
   disposal. The connection is intended to live for the application lifetime.
 
@@ -132,7 +136,7 @@ chips. Both screens listen to repository revisions and refresh after a local
 insert, edit, or delete.
 
 The dashboard export button creates one UTF-8 `.csv` file containing every row
-from both SQLite tables. A `record_type` column distinguishes categories from
+from all four SQLite tables. A `record_type` column distinguishes categories from
 transactions, allowing unused categories to remain in the backup. Values are
 CSV-escaped and text that could be interpreted as a spreadsheet formula is
 neutralized. Files are written under `kyatflow_exports` in the application
@@ -151,6 +155,21 @@ month. `fl_chart` renders the result as an interactive donut chart, while the
 ranked list shows each category's amount, percentage, and transaction count.
 Analytics subscribes to repository revisions, so adding, editing, or deleting a
 transaction refreshes the chart without a remote service or network request.
+
+## Budgets and recurring transactions
+
+Monthly category budgets are aggregated inside SQLite. The query joins expense
+transactions within the selected local calendar month, calculates the spent
+percentage, and returns `safe`, `warning`, or `exceeded` for each limit. The
+dashboard renders these results with `MonthlyBudgetProgressSection` and refreshes
+when either budgets or transactions change.
+
+`RecurringTransactionService` runs before the Flutter widget tree starts. A new
+rule creates one transaction on its first check; existing rules create each
+missed daily, weekly, monthly, or yearly occurrence through the current date.
+Generated transactions and `last_executed` updates share one SQLite transaction,
+so an interrupted run can be retried without committing duplicates. The check
+has no timer, background worker, network call, or remote backend.
 
 ## Validation
 

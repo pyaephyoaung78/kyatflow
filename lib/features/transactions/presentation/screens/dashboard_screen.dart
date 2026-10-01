@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/backup/csv_backup_service.dart';
+import '../../../budgets/presentation/widgets/budget_progress_widget.dart';
 import '../../domain/entities/transaction_category.dart';
 import '../../domain/entities/transaction_entry.dart';
 import '../models/transaction_category_option.dart';
@@ -215,6 +216,8 @@ class _DashboardBody extends StatelessWidget {
                 ),
               ),
             ),
+          const SizedBox(height: 19),
+          MonthlyBudgetProgressSection(activeMonth: state.activeMonth),
         ],
       ),
     );

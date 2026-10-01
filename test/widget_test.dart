@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kyatflow/features/budgets/domain/entities/budget.dart';
+import 'package:kyatflow/features/budgets/domain/repositories/budget_repository.dart';
+import 'package:kyatflow/features/budgets/presentation/providers/budget_providers.dart';
 import 'package:kyatflow/features/transactions/domain/entities/cash_flow_summary.dart';
 import 'package:kyatflow/features/transactions/domain/entities/category_spending.dart';
 import 'package:kyatflow/features/transactions/domain/entities/transaction_category.dart';
@@ -16,6 +19,7 @@ void main() {
       ProviderScope(
         overrides: [
           transactionRepositoryProvider.overrideWithValue(_FakeRepository()),
+          budgetRepositoryProvider.overrideWithValue(_FakeBudgetRepository()),
         ],
         child: const KyatFlowApp(),
       ),
@@ -172,4 +176,26 @@ class _FakeRepository implements TransactionRepository {
 
   @override
   Future<int> insert(TransactionDraft transaction) async => 1;
+}
+
+class _FakeBudgetRepository implements BudgetRepository {
+  @override
+  Stream<int> get changes => const Stream.empty();
+
+  @override
+  Future<void> delete(int id) async {}
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> edit(Budget budget) async {}
+
+  @override
+  Future<List<BudgetProgress>> getMonthlyProgress(DateTime month) async {
+    return const [];
+  }
+
+  @override
+  Future<int> insert(BudgetDraft budget) async => 1;
 }

@@ -57,7 +57,7 @@ void main() {
         connections.every((db) => identical(db, connections.first)),
         isTrue,
       );
-      expect(await connections.first.getVersion(), 2);
+      expect(await connections.first.getVersion(), 3);
       expect(
         (await connections.first.rawQuery(
           'PRAGMA foreign_keys',
@@ -363,6 +363,125 @@ void main() {
     },
   );
 
+  test('budget progress reports safe, warning, and exceeded states', () async {
+    final food = await category(name: 'Budget Food');
+    final transport = await category(name: 'Budget Transport');
+    final health = await category(name: 'Budget Health');
+    final income = await category(name: 'Budget Income', type: 'income');
+
+    await helper.insertBudget(
+      categoryId: food,
+      amountLimit: 1000,
+      month: 9,
+      year: 2026,
+      alertPercentage: 80,
+    );
+    await helper.insertBudget(
+      categoryId: transport,
+      amountLimit: 200,
+      month: 9,
+      year: 2026,
+      alertPercentage: 75,
+    );
+    await helper.insertBudget(
+      categoryId: health,
+      amountLimit: 500,
+      month: 9,
+      year: 2026,
+      alertPercentage: 80,
+    );
+
+    Future<void> spend(int categoryId, double amount, DateTime timestamp) {
+      return helper
+          .insertTransaction(
+            amount: amount,
+            type: 'expense',
+            categoryId: categoryId,
+            timestamp: timestamp,
+          )
+          .then((_) {});
+    }
+
+    await spend(food, 800, DateTime(2026, 9, 10));
+    await spend(transport, 250, DateTime(2026, 9, 11));
+    await spend(health, 100, DateTime(2026, 9, 12));
+    await spend(food, 9999, DateTime(2026, 10));
+
+    final rows = await helper.getBudgetProgress(month: 9, year: 2026);
+    expect(rows.map((row) => row['warning_state']), [
+      'exceeded',
+      'warning',
+      'safe',
+    ]);
+    expect(rows[0]['actual_spent'], 250.0);
+    expect(rows[0]['progress_percentage'], 125.0);
+    expect(rows[1]['actual_spent'], 800.0);
+    expect(rows[1]['progress_percentage'], 80.0);
+    expect(rows[2]['actual_spent'], 100.0);
+
+    await expectLater(
+      helper.insertBudget(
+        categoryId: food,
+        amountLimit: 500,
+        month: 9,
+        year: 2026,
+      ),
+      throwsA(isA<DatabaseException>()),
+    );
+    await expectLater(
+      helper.insertBudget(
+        categoryId: income,
+        amountLimit: 500,
+        month: 9,
+        year: 2026,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('recurring rule CRUD validates frequency and category type', () async {
+    final bills = await category(name: 'Internet');
+    final id = await helper.insertRecurringRule(
+      name: 'Home internet',
+      amount: 45000,
+      categoryId: bills,
+      type: 'expense',
+      frequency: 'monthly',
+      lastExecuted: DateTime.utc(2026, 8, 1),
+    );
+    var rule = (await helper.getRecurringRules()).single;
+    expect(rule['id'], id);
+    expect(rule['name'], 'Home internet');
+    expect(rule['frequency'], 'monthly');
+
+    expect(
+      await helper.updateRecurringRule(
+        id: id,
+        name: 'Fiber internet',
+        amount: 50000,
+        categoryId: bills,
+        type: 'expense',
+        frequency: 'monthly',
+      ),
+      1,
+    );
+    rule = (await helper.getRecurringRules()).single;
+    expect(rule['name'], 'Fiber internet');
+    expect(rule['last_executed'], isNull);
+    await expectLater(
+      helper.insertRecurringRule(
+        name: 'Broken',
+        amount: 1,
+        categoryId: bills,
+        type: 'expense',
+        frequency: 'sometimes',
+      ),
+      throwsArgumentError,
+    );
+    expect(await helper.deleteRecurringRule(id), 1);
+    expect(await helper.getRecurringRules(), isEmpty);
+  });
+
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {
@@ -374,6 +493,10 @@ void main() {
           "SELECT * FROM transactions WHERE type = 'expense' AND timestamp >= 0 ORDER BY timestamp DESC, id DESC",
       'idx_transactions_category_timestamp':
           'SELECT * FROM transactions WHERE category_id = 1 AND timestamp >= 0 ORDER BY timestamp DESC, id DESC',
+      'idx_budgets_year_month_category':
+          'SELECT * FROM budgets WHERE year = 2026 AND month = 9 ORDER BY category_id',
+      'idx_recurring_rules_last_executed':
+          'SELECT * FROM recurring_rules ORDER BY last_executed, id',
     };
     for (final entry in queries.entries) {
       final plan = await db.rawQuery('EXPLAIN QUERY PLAN ${entry.value}');
@@ -394,15 +517,17 @@ void main() {
     expect(await helper.getCategories(), hasLength(10));
   });
 
-  test('version 2 migration preserves an existing category set', () async {
-    await helper.close();
-    final legacyPath = p.join(directory.path, 'legacy.db');
-    final legacyDatabase = await databaseFactoryFfi.openDatabase(
-      legacyPath,
-      options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, _) async {
-          await db.execute('''
+  test(
+    'version 3 migration preserves data and creates local planning tables',
+    () async {
+      await helper.close();
+      final legacyPath = p.join(directory.path, 'legacy.db');
+      final legacyDatabase = await databaseFactoryFfi.openDatabase(
+        legacyPath,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, _) async {
+            await db.execute('''
             CREATE TABLE categories (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               name TEXT NOT NULL,
@@ -412,7 +537,7 @@ void main() {
               UNIQUE (id, type)
             )
           ''');
-          await db.execute('''
+            await db.execute('''
             CREATE TABLE transactions (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               amount REAL NOT NULL,
@@ -422,28 +547,36 @@ void main() {
               note TEXT
             )
           ''');
-          await db.insert('categories', {
-            'name': 'My custom category',
-            'icon': 'star',
-            'color': 0xFF112233,
-            'type': 'expense',
-          });
-        },
-      ),
-    );
-    await legacyDatabase.close();
+            await db.insert('categories', {
+              'name': 'My custom category',
+              'icon': 'star',
+              'color': 0xFF112233,
+              'type': 'expense',
+            });
+          },
+        ),
+      );
+      await legacyDatabase.close();
 
-    helper = DatabaseHelper.forTesting(
-      databaseFactory: databaseFactoryFfi,
-      databasePath: legacyPath,
-    );
-    await helper.initialize();
+      helper = DatabaseHelper.forTesting(
+        databaseFactory: databaseFactoryFfi,
+        databasePath: legacyPath,
+      );
+      await helper.initialize();
 
-    expect(await (await helper.database).getVersion(), 2);
-    final categories = await helper.getCategories();
-    expect(categories, hasLength(1));
-    expect(categories.single['name'], 'My custom category');
-  });
+      expect(await (await helper.database).getVersion(), 3);
+      final categories = await helper.getCategories();
+      expect(categories, hasLength(1));
+      expect(categories.single['name'], 'My custom category');
+      final tables = await (await helper.database).rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+      );
+      expect(
+        tables.map((row) => row['name']),
+        containsAll(['budgets', 'recurring_rules']),
+      );
+    },
+  );
 }
 
 class _FailOnceFactory implements DatabaseFactory {
