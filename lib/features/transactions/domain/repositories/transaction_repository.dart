@@ -25,9 +25,23 @@ abstract interface class TransactionRepository {
 
   Future<List<TransactionEntry>> getRecentTransactions({int limit = 5});
 
-  Future<List<TransactionEntry>> getLedgerTransactions({TransactionType? type});
+  Future<List<TransactionEntry>> getLedgerTransactions({
+    TransactionType? type,
+    required DateTime start,
+    required DateTime end,
+  });
 
-  Future<List<TransactionCategory>> getCategories();
+  Future<List<TransactionCategory>> getCategories({
+    bool includeArchived = false,
+  });
+
+  Future<int> addCategory(TransactionCategoryDraft category);
+
+  Future<void> editCategory(TransactionCategory category);
+
+  Future<void> setCategoryArchived(int id, {required bool archived});
+
+  Future<void> deleteCategory(int id);
 
   Future<List<CategorySpending>> getExpenseBreakdown({
     required DateTime start,
@@ -35,6 +49,16 @@ abstract interface class TransactionRepository {
   });
 
   void dispose();
+}
+
+class CategoryNotFoundException implements Exception {
+  const CategoryNotFoundException(this.id);
+  final int id;
+}
+
+class CategoryInUseException implements Exception {
+  const CategoryInUseException(this.id);
+  final int id;
 }
 
 class TransactionNotFoundException implements Exception {

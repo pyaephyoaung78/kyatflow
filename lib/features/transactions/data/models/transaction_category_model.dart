@@ -8,6 +8,7 @@ class TransactionCategoryModel {
     required this.icon,
     required this.color,
     required this.type,
+    required this.isArchived,
   });
 
   factory TransactionCategoryModel.fromMap(Map<String, Object?> map) {
@@ -17,6 +18,7 @@ class TransactionCategoryModel {
       icon: map['icon'] as String,
       color: map['color'] as int,
       type: map['type'] as String,
+      isArchived: (map['is_archived'] as int? ?? 0) == 1,
     );
   }
 
@@ -25,6 +27,7 @@ class TransactionCategoryModel {
   final String icon;
   final int color;
   final String type;
+  final bool isArchived;
 
   TransactionCategory toEntity() {
     return TransactionCategory(
@@ -33,6 +36,7 @@ class TransactionCategoryModel {
       icon: icon,
       color: color,
       type: TransactionType.fromDatabase(type),
+      isArchived: isArchived,
     );
   }
 }

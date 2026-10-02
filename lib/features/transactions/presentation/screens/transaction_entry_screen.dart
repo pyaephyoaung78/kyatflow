@@ -21,7 +21,7 @@ class TransactionEntryScreen extends StatefulWidget {
     required this.onSubmit,
     this.initialTransaction,
     this.onSaved,
-    this.currencyCode = 'MMK',
+    this.currencyCode = 'Mmk',
     this.clock,
   });
 
@@ -386,7 +386,7 @@ class RiverpodTransactionEntryScreen extends ConsumerWidget {
     required this.categories,
     this.initialTransaction,
     this.onSaved,
-    this.currencyCode = 'MMK',
+    this.currencyCode = 'Mmk',
   });
 
   final List<TransactionCategoryOption> categories;
@@ -453,7 +453,7 @@ class _AmountPanel extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              '$currencyCode ${_formatMoney(value)}',
+              '${_formatMoney(value)}${currencyCode.isEmpty ? '' : ' $currencyCode'}',
               key: const ValueKey('amount_total'),
               style: const TextStyle(
                 fontSize: 42,

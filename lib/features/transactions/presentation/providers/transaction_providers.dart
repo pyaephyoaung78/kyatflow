@@ -5,6 +5,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/backup/csv_backup_service.dart';
 import '../../data/repositories/sqlite_transaction_repository.dart';
 import '../../domain/repositories/transaction_repository.dart';
+import '../../domain/entities/transaction_category.dart';
 import '../state/transaction_notifier.dart';
 import '../state/transaction_state.dart';
 import '../state/dashboard_notifier.dart';
@@ -34,6 +35,13 @@ final transactionStateProvider =
       return TransactionNotifier(
         repository: ref.watch(transactionRepositoryProvider),
       );
+    });
+
+final managedCategoriesProvider = FutureProvider.autoDispose
+    .family<List<TransactionCategory>, bool>((ref, includeArchived) {
+      return ref
+          .watch(transactionRepositoryProvider)
+          .getCategories(includeArchived: includeArchived);
     });
 
 final dashboardStateProvider =

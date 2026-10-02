@@ -35,9 +35,9 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.text('Food'), findsOneWidget);
-    expect(find.text('MMK 250 of MMK 200'), findsOneWidget);
+    expect(find.text('250 Mmk of 200 Mmk'), findsOneWidget);
     expect(find.text('125%'), findsOneWidget);
-    expect(find.text('MMK 50 over'), findsOneWidget);
+    expect(find.text('50 Mmk over'), findsOneWidget);
     final indicator = tester.widget<LinearProgressIndicator>(
       find.byType(LinearProgressIndicator),
     );

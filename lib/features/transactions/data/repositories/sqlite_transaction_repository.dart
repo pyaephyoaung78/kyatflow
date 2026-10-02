@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:sqflite/sqflite.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../domain/entities/cash_flow_summary.dart';
@@ -104,20 +105,74 @@ class SqliteTransactionRepository implements TransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    required DateTime start,
+    required DateTime end,
   }) async {
     final rows = await _databaseHelper.getTransactionDetails(
       type: type?.databaseValue,
+      start: start,
+      end: end,
     );
     return _mapTransactions(rows);
   }
 
   @override
-  Future<List<TransactionCategory>> getCategories() async {
-    final rows = await _databaseHelper.getCategories();
+  Future<List<TransactionCategory>> getCategories({
+    bool includeArchived = false,
+  }) async {
+    final rows = await _databaseHelper.getCategories(
+      includeArchived: includeArchived,
+    );
     return rows
         .map(TransactionCategoryModel.fromMap)
         .map((model) => model.toEntity())
         .toList(growable: false);
+  }
+
+  @override
+  Future<int> addCategory(TransactionCategoryDraft category) async {
+    final id = await _databaseHelper.insertCategory(
+      name: category.name,
+      icon: category.icon,
+      color: category.color,
+      type: category.type.databaseValue,
+    );
+    _publishChange();
+    return id;
+  }
+
+  @override
+  Future<void> editCategory(TransactionCategory category) async {
+    final affected = await _databaseHelper.updateCategory(
+      id: category.id,
+      name: category.name,
+      icon: category.icon,
+      color: category.color,
+      type: category.type.databaseValue,
+    );
+    if (affected == 0) throw CategoryNotFoundException(category.id);
+    _publishChange();
+  }
+
+  @override
+  Future<void> setCategoryArchived(int id, {required bool archived}) async {
+    final affected = await _databaseHelper.setCategoryArchived(
+      id,
+      archived: archived,
+    );
+    if (affected == 0) throw CategoryNotFoundException(id);
+    _publishChange();
+  }
+
+  @override
+  Future<void> deleteCategory(int id) async {
+    try {
+      final affected = await _databaseHelper.deleteCategory(id);
+      if (affected == 0) throw CategoryNotFoundException(id);
+    } on DatabaseException {
+      throw CategoryInUseException(id);
+    }
+    _publishChange();
   }
 
   @override

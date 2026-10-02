@@ -142,7 +142,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       await capture(tester, 'entry');
-      expect(find.text('MMK 12,000'), findsOneWidget);
+      expect(find.text('12,000 Mmk'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const ValueKey('save_transaction')));
       await tester.pumpAndSettle();
@@ -202,7 +202,7 @@ void main() {
       expect(find.text('No expenses in this period'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('ledger_tab')));
       await tester.pumpAndSettle();
-      expect(find.text('No matching transactions'), findsOneWidget);
+      expect(find.textContaining('No transactions in'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -261,8 +261,16 @@ class _DesignRepository extends TestTransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
-  }) async =>
-      entries.where((entry) => type == null || entry.type == type).toList();
+    required DateTime start,
+    required DateTime end,
+  }) async => entries
+      .where(
+        (entry) =>
+            !entry.timestamp.isBefore(start) &&
+            entry.timestamp.isBefore(end) &&
+            (type == null || entry.type == type),
+      )
+      .toList();
   @override
   Future<List<CategorySpending>> getExpenseBreakdown({
     required DateTime start,

@@ -66,7 +66,9 @@ class UserGuideScreen extends StatelessWidget {
                           icon: CupertinoIcons.chart_pie,
                           title: 'Review your spending',
                           message:
-                              'Use Analytics to compare This Week and This Month. Use History to filter All, Income, or Expense entries.',
+                              'Use Analytics to compare This Week and This Month. '
+                              'In History, move between months, filter entries, '
+                              'or tap a transaction to edit or delete it.',
                         ),
                         _GuideStep(
                           number: '5',
@@ -92,6 +94,14 @@ class UserGuideScreen extends StatelessWidget {
                           title: 'Use notes for details',
                           message:
                               'Notes such as “Groceries” or “Weekend bus” make similar transactions easier to understand later.',
+                        ),
+                        _GuideTip(
+                          icon: CupertinoIcons.square_grid_2x2,
+                          title: 'Keep categories tidy',
+                          message:
+                              'Open Settings → Manage categories to add or edit '
+                              'categories. Archive one to hide it from new entries '
+                              'while keeping its old transactions and reports.',
                         ),
                         _GuideTip(
                           icon: CupertinoIcons.lock_shield,

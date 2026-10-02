@@ -46,7 +46,21 @@ class TestTransactionRepository implements TransactionRepository {
   Future<void> edit(TransactionEntry transaction) async {}
 
   @override
-  Future<List<TransactionCategory>> getCategories() async => const [
+  Future<int> addCategory(TransactionCategoryDraft category) async => 1;
+
+  @override
+  Future<void> editCategory(TransactionCategory category) async {}
+
+  @override
+  Future<void> setCategoryArchived(int id, {required bool archived}) async {}
+
+  @override
+  Future<void> deleteCategory(int id) async {}
+
+  @override
+  Future<List<TransactionCategory>> getCategories({
+    bool includeArchived = false,
+  }) async => const [
     TransactionCategory(
       id: 1,
       name: 'Salary',
@@ -92,10 +106,17 @@ class TestTransactionRepository implements TransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    required DateTime start,
+    required DateTime end,
   }) async {
-    return type == null
-        ? _transactions
-        : _transactions.where((entry) => entry.type == type).toList();
+    return _transactions
+        .where(
+          (entry) =>
+              !entry.timestamp.isBefore(start) &&
+              entry.timestamp.isBefore(end) &&
+              (type == null || entry.type == type),
+        )
+        .toList();
   }
 
   @override

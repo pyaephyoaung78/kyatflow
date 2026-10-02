@@ -13,7 +13,7 @@ const _monthNames = [
   'December',
 ];
 
-String formatMoney(double value, {String currencyCode = 'MMK'}) {
+String formatMoney(double value, {String currencyCode = 'Mmk'}) {
   final negative = value < 0;
   final absolute = value.abs();
   final fixed = absolute.toStringAsFixed(2);
@@ -25,7 +25,8 @@ String formatMoney(double value, {String currencyCode = 'MMK'}) {
     grouped.write(digits[index]);
   }
   final fraction = parts[1] == '00' ? '' : '.${parts[1]}';
-  return '$currencyCode ${negative ? '-' : ''}$grouped$fraction';
+  final amount = '${negative ? '-' : ''}$grouped$fraction';
+  return currencyCode.isEmpty ? amount : '$amount $currencyCode';
 }
 
 String formatMonth(DateTime date) =>

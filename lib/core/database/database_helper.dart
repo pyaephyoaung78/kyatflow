@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const databaseName = 'kyatflow.db';
-  static const databaseVersion = 3;
+  static const databaseVersion = 4;
 
   DatabaseFactory? _factory;
   String? _path;
@@ -66,6 +66,8 @@ class DatabaseHelper {
         icon TEXT NOT NULL CHECK (length(trim(icon)) > 0),
         color INTEGER NOT NULL CHECK (color BETWEEN 0 AND 4294967295),
         type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+        is_archived INTEGER NOT NULL DEFAULT 0
+          CHECK (is_archived IN (0, 1)),
         UNIQUE (id, type)
       )
     ''');
@@ -85,6 +87,10 @@ class DatabaseHelper {
     // income category, or changing the type of a category already in use.
     batch.execute('''
       CREATE INDEX idx_categories_type_name ON categories (type, name, id)
+    ''');
+    batch.execute('''
+      CREATE INDEX idx_categories_archived_type_name
+      ON categories (is_archived, type, name, id)
     ''');
     batch.execute('''
       CREATE INDEX idx_transactions_timestamp
@@ -113,6 +119,17 @@ class DatabaseHelper {
       final batch = db.batch();
       _createBudgetingTables(batch);
       await batch.commit(noResult: true);
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        ALTER TABLE categories
+        ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0
+          CHECK (is_archived IN (0, 1))
+      ''');
+      await db.execute('''
+        CREATE INDEX idx_categories_archived_type_name
+        ON categories (is_archived, type, name, id)
+      ''');
     }
   }
 
@@ -192,13 +209,23 @@ class DatabaseHelper {
     return rows.isEmpty ? null : rows.first;
   }
 
-  Future<List<Map<String, Object?>>> getCategories({String? type}) async {
+  Future<List<Map<String, Object?>>> getCategories({
+    String? type,
+    bool includeArchived = false,
+  }) async {
     if (type != null) _validateType(type);
+    final clauses = <String>[];
+    final arguments = <Object?>[];
+    if (!includeArchived) clauses.add('is_archived = 0');
+    if (type != null) {
+      clauses.add('type = ?');
+      arguments.add(type);
+    }
     return (await database).query(
       'categories',
-      where: type == null ? null : 'type = ?',
-      whereArgs: type == null ? null : [type],
-      orderBy: 'name ASC, id ASC',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: arguments.isEmpty ? null : arguments,
+      orderBy: 'is_archived ASC, name ASC, id ASC',
     );
   }
 
@@ -223,6 +250,15 @@ class DatabaseHelper {
   Future<int> deleteCategory(int id) async {
     return (await database).delete(
       'categories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> setCategoryArchived(int id, {required bool archived}) async {
+    return (await database).update(
+      'categories',
+      {'is_archived': archived ? 1 : 0},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -377,14 +413,31 @@ class DatabaseHelper {
   /// Returns transaction rows enriched with category presentation metadata.
   Future<List<Map<String, Object?>>> getTransactionDetails({
     String? type,
+    DateTime? start,
+    DateTime? end,
     int? limit,
   }) async {
     if (type != null) _validateType(type);
     if (limit != null && limit <= 0) {
       throw ArgumentError.value(limit, 'limit', 'Must be positive');
     }
+    if (start != null && end != null && !start.isBefore(end)) {
+      throw ArgumentError('start must be earlier than end');
+    }
+    final clauses = <String>[];
     final arguments = <Object?>[];
-    if (type != null) arguments.add(type);
+    if (type != null) {
+      clauses.add('t.type = ?');
+      arguments.add(type);
+    }
+    if (start != null) {
+      clauses.add('t.timestamp >= ?');
+      arguments.add(start.millisecondsSinceEpoch);
+    }
+    if (end != null) {
+      clauses.add('t.timestamp < ?');
+      arguments.add(end.millisecondsSinceEpoch);
+    }
     if (limit != null) arguments.add(limit);
     return (await database).rawQuery('''
       SELECT
@@ -399,7 +452,7 @@ class DatabaseHelper {
         c.color AS category_color
       FROM transactions AS t
       INNER JOIN categories AS c ON c.id = t.category_id
-      ${type == null ? '' : 'WHERE t.type = ?'}
+      ${clauses.isEmpty ? '' : 'WHERE ${clauses.join(' AND ')}'}
       ORDER BY t.timestamp DESC, t.id DESC
       ${limit == null ? '' : 'LIMIT ?'}
       ''', arguments);

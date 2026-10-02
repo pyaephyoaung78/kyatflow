@@ -149,16 +149,13 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Text('MMK', style: AppTheme.caption),
-                                    const SizedBox(height: 5),
                                     FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Text(
                                         formatMoney(
                                           selected?.amount ??
                                               state.totalExpense,
-                                          currencyCode: '',
-                                        ).trim(),
+                                        ),
                                         key: const ValueKey('analytics_total'),
                                         style: const TextStyle(
                                           fontSize: 28,

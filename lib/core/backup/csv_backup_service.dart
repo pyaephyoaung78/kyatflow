@@ -104,6 +104,7 @@ class CsvBackupEncoder {
     'icon',
     'color',
     'type',
+    'is_archived',
     'amount',
     'category_id',
     'timestamp_epoch_ms',
@@ -129,6 +130,7 @@ class CsvBackupEncoder {
           'icon': category['icon'],
           'color': category['color'],
           'type': category['type'],
+          'is_archived': category['is_archived'],
         }),
       );
     }

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/finance_widgets.dart';
+import 'category_management_screen.dart';
 import 'user_guide_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -50,13 +51,30 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 28),
+      const SectionHeading('Money setup'),
+      SurfaceGroup(
+        children: [
+          _SettingsLinkRow(
+            key: const ValueKey('manage_categories'),
+            icon: CupertinoIcons.square_grid_2x2,
+            title: 'Manage categories',
+            value: 'Add, edit, archive, or delete',
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => const CategoryManagementScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 28),
       const SectionHeading('Preferences'),
       const SurfaceGroup(
         children: [
           _SettingsRow(
             icon: CupertinoIcons.money_dollar_circle,
             title: 'Currency',
-            value: 'Myanmar Kyat (MMK)',
+            value: 'Myanmar Kyat (Mmk)',
           ),
           _SettingsRow(
             icon: CupertinoIcons.calendar,

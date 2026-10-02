@@ -25,56 +25,53 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test(
-    'creates a UTF-8 CSV containing every local record type',
-    () async {
-      final categories = await database.getCategories(type: 'expense');
-      final foodId =
-          categories.firstWhere((row) => row['name'] == 'Food')['id'] as int;
-      await database.insertTransaction(
-        amount: 1250.5,
-        type: 'expense',
-        categoryId: foodId,
-        timestamp: DateTime(2026, 9, 30, 12, 45),
-        note: '=SUM(1,2)\n"quoted"',
-      );
-      await database.insertBudget(
-        categoryId: foodId,
-        amountLimit: 50000,
-        month: 9,
-        year: 2026,
-      );
-      await database.insertRecurringRule(
-        name: 'Weekly groceries',
-        amount: 10000,
-        categoryId: foodId,
-        type: 'expense',
-        frequency: 'weekly',
-      );
-      final service = CsvBackupService(
-        databaseHelper: database,
-        documentsDirectoryProvider: () async => directory,
-        clock: () => DateTime(2026, 9, 30, 14, 5, 6),
-      );
+  test('creates a UTF-8 CSV containing every local record type', () async {
+    final categories = await database.getCategories(type: 'expense');
+    final foodId =
+        categories.firstWhere((row) => row['name'] == 'Food')['id'] as int;
+    await database.insertTransaction(
+      amount: 1250.5,
+      type: 'expense',
+      categoryId: foodId,
+      timestamp: DateTime(2026, 9, 30, 12, 45),
+      note: '=SUM(1,2)\n"quoted"',
+    );
+    await database.insertBudget(
+      categoryId: foodId,
+      amountLimit: 50000,
+      month: 9,
+      year: 2026,
+    );
+    await database.insertRecurringRule(
+      name: 'Weekly groceries',
+      amount: 10000,
+      categoryId: foodId,
+      type: 'expense',
+      frequency: 'weekly',
+    );
+    final service = CsvBackupService(
+      databaseHelper: database,
+      documentsDirectoryProvider: () async => directory,
+      clock: () => DateTime(2026, 9, 30, 14, 5, 6),
+    );
 
-      final file = await service.createBackup();
-      expect(file.path, endsWith('kyatflow-backup-20260930-140506.csv'));
-      expect((await file.readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
-      final csv = await file.readAsString();
-      expect(csv, contains('"record_type","id","name"'));
-      expect(csv, contains('"category"'));
-      expect(csv, contains('"transaction"'));
-      expect(csv, contains('"budget"'));
-      expect(csv, contains('"recurring_rule"'));
-      expect(csv, contains('"Weekly groceries"'));
-      expect(csv, contains('"1250.5"'));
-      expect(csv, contains('"\'=SUM(1,2)\n""quoted"""'));
-      expect(
-        RegExp(r'^"category",', multiLine: true).allMatches(csv),
-        hasLength(10),
-      );
-    },
-  );
+    final file = await service.createBackup();
+    expect(file.path, endsWith('kyatflow-backup-20260930-140506.csv'));
+    expect((await file.readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
+    final csv = await file.readAsString();
+    expect(csv, contains('"record_type","id","name"'));
+    expect(csv, contains('"category"'));
+    expect(csv, contains('"transaction"'));
+    expect(csv, contains('"budget"'));
+    expect(csv, contains('"recurring_rule"'));
+    expect(csv, contains('"Weekly groceries"'));
+    expect(csv, contains('"1250.5"'));
+    expect(csv, contains('"\'=SUM(1,2)\n""quoted"""'));
+    expect(
+      RegExp(r'^"category",', multiLine: true).allMatches(csv),
+      hasLength(10),
+    );
+  });
 
   test('shares the generated CSV through the injected share gateway', () async {
     ShareParams? captured;

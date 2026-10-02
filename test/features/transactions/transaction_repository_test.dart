@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kyatflow/core/database/database_helper.dart';
 import 'package:kyatflow/features/transactions/data/repositories/sqlite_transaction_repository.dart';
+import 'package:kyatflow/features/transactions/domain/entities/transaction_category.dart';
 import 'package:kyatflow/features/transactions/domain/entities/transaction_entry.dart';
 import 'package:kyatflow/features/transactions/domain/repositories/transaction_repository.dart';
 import 'package:kyatflow/features/transactions/domain/value_objects/transaction_date_filter.dart';
@@ -151,6 +152,62 @@ void main() {
   );
 
   test(
+    'category management preserves used categories through archiving',
+    () async {
+      final id = await repository.addCategory(
+        const TransactionCategoryDraft(
+          name: 'Coffee',
+          icon: 'restaurant',
+          color: 0xFF246B55,
+          type: TransactionType.expense,
+        ),
+      );
+      await repository.editCategory(
+        TransactionCategory(
+          id: id,
+          name: 'Cafes',
+          icon: 'restaurant',
+          color: 0xFF2D6A9F,
+          type: TransactionType.expense,
+        ),
+      );
+      await repository.setCategoryArchived(id, archived: true);
+
+      expect(
+        (await repository.getCategories()).map((category) => category.id),
+        isNot(contains(id)),
+      );
+      final archived = (await repository.getCategories(
+        includeArchived: true,
+      )).singleWhere((category) => category.id == id);
+      expect(archived.name, 'Cafes');
+      expect(archived.isArchived, isTrue);
+
+      final transactionId = await repository.insert(
+        TransactionDraft(
+          amount: 4500,
+          type: TransactionType.expense,
+          categoryId: id,
+          timestamp: reference,
+          note: 'Coffee beans',
+        ),
+      );
+      await expectLater(
+        repository.deleteCategory(id),
+        throwsA(isA<CategoryInUseException>()),
+      );
+      await repository.delete(transactionId);
+      await repository.deleteCategory(id);
+      expect(
+        (await repository.getCategories(
+          includeArchived: true,
+        )).map((category) => category.id),
+        isNot(contains(id)),
+      );
+    },
+  );
+
+  test(
     'notifier streams list and monthly balance updates to its state',
     () async {
       final notifier = TransactionNotifier(
@@ -196,7 +253,7 @@ void main() {
         repository: repository,
         clock: () => reference,
       );
-      final ledger = LedgerNotifier(repository);
+      final ledger = LedgerNotifier(repository, clock: () => reference);
       addTearDown(dashboard.dispose);
       addTearDown(ledger.dispose);
       await _waitForDashboard(
@@ -220,20 +277,25 @@ void main() {
         dashboard,
         (state) => state.summary.currentBalance == 750,
       );
-      await _waitForLedger(ledger, (state) => state.transactions.length == 2);
+      await _waitForLedger(ledger, (state) => state.transactions.length == 1);
 
       expect(dashboard.state.summary.totalIncome, 0);
       expect(dashboard.state.summary.totalExpense, 250);
       expect(dashboard.state.recentTransactions.first.categoryName, 'Food');
       expect(dashboard.state.categories, isNotEmpty);
 
+      await ledger.showPreviousMonth();
+      expect(ledger.state.activeMonth, DateTime(2026, 8));
       await ledger.setFilter(LedgerTypeFilter.income);
       expect(ledger.state.transactions, hasLength(1));
       expect(ledger.state.transactions.single.type, TransactionType.income);
       expect(ledger.state.transactions.single.categoryName, 'Salary');
 
+      await ledger.showNextMonth();
+      expect(ledger.state.activeMonth, DateTime(2026, 9));
+      expect(ledger.state.transactions, isEmpty);
       await repository.insert(draft(amount: 400, type: TransactionType.income));
-      await _waitForLedger(ledger, (state) => state.transactions.length == 2);
+      await _waitForLedger(ledger, (state) => state.transactions.length == 1);
       await _waitForDashboard(
         dashboard,
         (state) => state.summary.totalIncome == 400,

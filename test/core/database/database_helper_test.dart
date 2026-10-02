@@ -57,7 +57,7 @@ void main() {
         connections.every((db) => identical(db, connections.first)),
         isTrue,
       );
-      expect(await connections.first.getVersion(), 3);
+      expect(await connections.first.getVersion(), 4);
       expect(
         (await connections.first.rawQuery(
           'PRAGMA foreign_keys',
@@ -86,6 +86,19 @@ void main() {
       1,
     );
     expect((await helper.getCategory(id))!['name'], 'Meals');
+    expect(await helper.setCategoryArchived(id, archived: true), 1);
+    expect(
+      (await helper.getCategories(type: 'expense')).map((row) => row['id']),
+      isNot(contains(id)),
+    );
+    expect(
+      (await helper.getCategories(
+        type: 'expense',
+        includeArchived: true,
+      )).map((row) => row['id']),
+      contains(id),
+    );
+    expect(await helper.setCategoryArchived(id, archived: false), 1);
     expect(await helper.deleteCategory(id), 1);
     expect(await helper.getCategory(id), isNull);
     expect(await helper.deleteCategory(id), 0);
@@ -485,8 +498,8 @@ void main() {
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {
-      'idx_categories_type_name':
-          "SELECT * FROM categories WHERE type = 'expense' ORDER BY name, id",
+      'idx_categories_archived_type_name':
+          "SELECT * FROM categories WHERE is_archived = 0 AND type = 'expense' ORDER BY name, id",
       'idx_transactions_timestamp':
           'SELECT * FROM transactions WHERE timestamp >= 0 ORDER BY timestamp DESC, id DESC',
       'idx_transactions_type_timestamp':
@@ -518,7 +531,7 @@ void main() {
   });
 
   test(
-    'version 3 migration preserves data and creates local planning tables',
+    'version 4 migration preserves data and adds category archiving',
     () async {
       await helper.close();
       final legacyPath = p.join(directory.path, 'legacy.db');
@@ -564,10 +577,11 @@ void main() {
       );
       await helper.initialize();
 
-      expect(await (await helper.database).getVersion(), 3);
-      final categories = await helper.getCategories();
+      expect(await (await helper.database).getVersion(), 4);
+      final categories = await helper.getCategories(includeArchived: true);
       expect(categories, hasLength(1));
       expect(categories.single['name'], 'My custom category');
+      expect(categories.single['is_archived'], 0);
       final tables = await (await helper.database).rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table'",
       );

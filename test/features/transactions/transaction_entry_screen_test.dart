@@ -77,7 +77,7 @@ void main() {
       await tapKey(tester, key);
     }
     expect(find.text('12 + 3 × 4'), findsOneWidget);
-    expect(find.text('MMK 24'), findsOneWidget);
+    expect(find.text('24 Mmk'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField), 'Lunch and coffee');
     final saveButton = find.byKey(const ValueKey('save_transaction'));
@@ -129,6 +129,6 @@ void main() {
     expect(find.text('Cannot divide by zero'), findsOneWidget);
     await tapKey(tester, 'backspace');
     await tapKey(tester, '2');
-    expect(find.text('MMK 2.50'), findsOneWidget);
+    expect(find.text('2.50 Mmk'), findsOneWidget);
   });
 }
