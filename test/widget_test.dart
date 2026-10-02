@@ -59,6 +59,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Local-first by design'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('open_user_guide')));
+    await tester.pumpAndSettle();
+    expect(find.text('How to use Kyat Flow'), findsWidgets);
+    expect(find.text('Add your income'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Keep a backup'),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Keep a backup'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Local-first by design'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('add_transaction')));
     await tester.pumpAndSettle();
     expect(find.text('New transaction'), findsOneWidget);
