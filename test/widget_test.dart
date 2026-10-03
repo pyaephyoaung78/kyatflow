@@ -103,6 +103,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add_category')));
     await tester.pumpAndSettle();
     expect(find.text('New category'), findsOneWidget);
+    await tester.drag(
+      find.byType(Scrollable).last,
+      const Offset(0, -1000),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Add category'), findsOneWidget);
     await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();

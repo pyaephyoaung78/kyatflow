@@ -367,6 +367,21 @@ class _CategoryEditorScreenState extends ConsumerState<_CategoryEditorScreen> {
     'shopping_bag',
     'receipt_long',
     'medical_services',
+    'cigarettes',
+    'debt',
+    'internet',
+    'subscription',
+    'movie',
+    'rent',
+    'family',
+    'phone',
+    'utilities',
+    'drinks',
+    'education',
+    'travel',
+    'clothing',
+    'personal',
+    'pets',
     'account_balance_wallet',
     'work',
     'card_giftcard',
@@ -382,6 +397,16 @@ class _CategoryEditorScreenState extends ConsumerState<_CategoryEditorScreen> {
     0xFF88713B,
     0xFF43766C,
     0xFF8D4D72,
+    0xFF1F7A8C,
+    0xFF2F855A,
+    0xFFB7791F,
+    0xFF3F51B5,
+    0xFFB23A48,
+    0xFF5C677D,
+    0xFF6B705C,
+    0xFF9D4EDD,
+    0xFFE07A5F,
+    0xFF4D908E,
   ];
 
   late final TextEditingController _nameController;
@@ -462,6 +487,7 @@ class _CategoryEditorScreenState extends ConsumerState<_CategoryEditorScreen> {
                     color: _icon == icon ? Colors.white : AppTheme.ink,
                     size: 21,
                   ),
+                  tooltipBuilder: categoryIconLabel,
                   onSelected: (icon) => setState(() => _icon = icon),
                 ),
                 const SizedBox(height: 28),
@@ -579,35 +605,40 @@ class _ChoiceGrid<T> extends StatelessWidget {
     required this.selected,
     required this.itemBuilder,
     required this.onSelected,
+    this.tooltipBuilder,
   });
 
   final List<T> values;
   final T selected;
   final Widget Function(T value) itemBuilder;
   final ValueChanged<T> onSelected;
+  final String Function(T value)? tooltipBuilder;
 
   @override
   Widget build(BuildContext context) => Wrap(
     spacing: 10,
     runSpacing: 10,
-    children: [
-      for (final value in values)
-        AnimatedContainer(
-          duration: AppTheme.motion(context, 180),
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: value == selected ? AppTheme.accent : AppTheme.surface,
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => onSelected(value),
-            child: itemBuilder(value),
-          ),
-        ),
-    ],
+    children: [for (final value in values) _buildChoice(context, value)],
   );
+
+  Widget _buildChoice(BuildContext context, T value) {
+    final choice = AnimatedContainer(
+      duration: AppTheme.motion(context, 180),
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: value == selected ? AppTheme.accent : AppTheme.surface,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: () => onSelected(value),
+        child: itemBuilder(value),
+      ),
+    );
+    final label = tooltipBuilder?.call(value);
+    return label == null ? choice : Tooltip(message: label, child: choice);
+  }
 }
 
 enum _CategoryAction { edit, archive, restore, delete }

@@ -255,13 +255,15 @@ class LedgerScreen extends ConsumerWidget {
     WidgetRef ref,
     TransactionEntry transaction,
   ) async {
+    final note = transaction.note?.trim();
     final action = await showCupertinoModalPopup<_TransactionAction>(
       context: context,
       builder: (context) => CupertinoActionSheet(
         title: Text(transaction.categoryName ?? 'Transaction'),
         message: Text(
           '${formatMoney(transaction.amount)} · '
-          '${formatShortDate(transaction.timestamp)}',
+          '${formatShortDate(transaction.timestamp)}'
+          '${note == null || note.isEmpty ? '' : '\n$note'}',
         ),
         actions: [
           CupertinoActionSheetAction(
