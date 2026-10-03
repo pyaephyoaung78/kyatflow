@@ -27,6 +27,7 @@ abstract interface class TransactionRepository {
 
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    int? categoryId,
     required DateTime start,
     required DateTime end,
   });

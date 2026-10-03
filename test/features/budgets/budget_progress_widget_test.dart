@@ -4,6 +4,29 @@ import 'package:kyatflow/features/budgets/domain/entities/budget.dart';
 import 'package:kyatflow/features/budgets/presentation/widgets/budget_progress_widget.dart';
 
 void main() {
+  testWidgets('shows planned budget and unallocated salary totals', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: EdgeInsets.all(16),
+            child: BudgetPlanSummaryWidget(
+              totalPlanned: 510000,
+              monthlyIncome: 600000,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('510,000 Mmk'), findsOneWidget);
+    expect(find.text('600,000 Mmk'), findsOneWidget);
+    expect(find.text('90,000 Mmk'), findsOneWidget);
+    expect(find.text('Unallocated salary'), findsOneWidget);
+  });
+
   testWidgets('shows exceeded budget amount and clamped visual progress', (
     tester,
   ) async {

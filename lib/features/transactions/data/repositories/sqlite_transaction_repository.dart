@@ -105,11 +105,13 @@ class SqliteTransactionRepository implements TransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    int? categoryId,
     required DateTime start,
     required DateTime end,
   }) async {
     final rows = await _databaseHelper.getTransactionDetails(
       type: type?.databaseValue,
+      categoryId: categoryId,
       start: start,
       end: end,
     );

@@ -106,6 +106,7 @@ class TestTransactionRepository implements TransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    int? categoryId,
     required DateTime start,
     required DateTime end,
   }) async {
@@ -114,7 +115,8 @@ class TestTransactionRepository implements TransactionRepository {
           (entry) =>
               !entry.timestamp.isBefore(start) &&
               entry.timestamp.isBefore(end) &&
-              (type == null || entry.type == type),
+              (type == null || entry.type == type) &&
+              (categoryId == null || entry.categoryId == categoryId),
         )
         .toList();
   }

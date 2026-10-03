@@ -413,6 +413,7 @@ class DatabaseHelper {
   /// Returns transaction rows enriched with category presentation metadata.
   Future<List<Map<String, Object?>>> getTransactionDetails({
     String? type,
+    int? categoryId,
     DateTime? start,
     DateTime? end,
     int? limit,
@@ -429,6 +430,10 @@ class DatabaseHelper {
     if (type != null) {
       clauses.add('t.type = ?');
       arguments.add(type);
+    }
+    if (categoryId != null) {
+      clauses.add('t.category_id = ?');
+      arguments.add(categoryId);
     }
     if (start != null) {
       clauses.add('t.timestamp >= ?');

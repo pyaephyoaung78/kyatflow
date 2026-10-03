@@ -261,6 +261,7 @@ class _DesignRepository extends TestTransactionRepository {
   @override
   Future<List<TransactionEntry>> getLedgerTransactions({
     TransactionType? type,
+    int? categoryId,
     required DateTime start,
     required DateTime end,
   }) async => entries
@@ -268,7 +269,8 @@ class _DesignRepository extends TestTransactionRepository {
         (entry) =>
             !entry.timestamp.isBefore(start) &&
             entry.timestamp.isBefore(end) &&
-            (type == null || entry.type == type),
+            (type == null || entry.type == type) &&
+            (categoryId == null || entry.categoryId == categoryId),
       )
       .toList();
   @override

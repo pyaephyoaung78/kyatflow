@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/finance_entry_route.dart';
 import '../../../../core/widgets/finance_widgets.dart';
 import '../../../budgets/presentation/widgets/budget_progress_widget.dart';
+import '../../../budgets/presentation/screens/budget_management_screen.dart';
 import '../../domain/entities/transaction_entry.dart';
 import '../models/transaction_category_option.dart';
 import '../providers/transaction_providers.dart';
@@ -74,7 +75,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ],
           ),
           const SizedBox(height: 28),
-          MonthlyBudgetProgressSection(activeMonth: state.activeMonth),
+          MonthlyBudgetProgressSection(
+            activeMonth: state.activeMonth,
+            onManage: () => _openBudgets(state.activeMonth),
+          ),
         ],
       ],
     );
@@ -100,6 +104,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               .toList(growable: false),
           initialTransaction: transaction,
         ),
+      ),
+    );
+  }
+
+  Future<void> _openBudgets(DateTime activeMonth) async {
+    await Navigator.of(context).push<void>(
+      CupertinoPageRoute(
+        builder: (_) => BudgetManagementScreen(initialMonth: activeMonth),
       ),
     );
   }

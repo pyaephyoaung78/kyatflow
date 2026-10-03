@@ -322,7 +322,12 @@ void main() {
   test('transaction details include joined category metadata', () async {
     final categoryId = await category(name: 'Coffee');
     final id = await transaction(categoryId);
-    final row = (await helper.getTransactionDetails(limit: 1)).single;
+    await transaction(await category(name: 'Transport'));
+    final row = (await helper.getTransactionDetails(
+      categoryId: categoryId,
+      start: DateTime.utc(2026, 9),
+      end: DateTime.utc(2026, 10),
+    )).single;
     expect(row['id'], id);
     expect(row['category_name'], 'Coffee');
     expect(row['category_icon'], 'restaurant');

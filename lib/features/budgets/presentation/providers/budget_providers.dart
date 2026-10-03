@@ -27,3 +27,12 @@ final monthlyBudgetProgressProvider = FutureProvider.autoDispose
           .watch(budgetRepositoryProvider)
           .getMonthlyProgress(activeMonth);
     });
+
+final monthlyBudgetIncomeProvider = FutureProvider.autoDispose
+    .family<double, DateTime>((ref, activeMonth) async {
+      ref.watch(_transactionRevisionProvider);
+      final summary = await ref
+          .watch(transactionRepositoryProvider)
+          .getMonthlyCashFlow(activeMonth);
+      return summary.totalIncome;
+    });

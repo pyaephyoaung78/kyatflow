@@ -52,3 +52,20 @@ String formatShortDate(DateTime date) {
   final month = _monthNames[date.month - 1].substring(0, 3);
   return '$month ${date.day}';
 }
+
+String formatDateRange(DateTime start, DateTime exclusiveEnd) {
+  final end = exclusiveEnd.subtract(const Duration(days: 1));
+  if (start.year == end.year &&
+      start.month == end.month &&
+      start.day == end.day) {
+    return '${_monthNames[start.month - 1].substring(0, 3)} '
+        '${start.day}, ${start.year}';
+  }
+  final startMonth = _monthNames[start.month - 1].substring(0, 3);
+  final endMonth = _monthNames[end.month - 1].substring(0, 3);
+  if (start.year == end.year) {
+    return '$startMonth ${start.day} – $endMonth ${end.day}, ${end.year}';
+  }
+  return '$startMonth ${start.day}, ${start.year} – '
+      '$endMonth ${end.day}, ${end.year}';
+}

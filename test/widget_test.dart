@@ -26,7 +26,7 @@ void main() {
     expect(find.text('Total balance'), findsOneWidget);
     expect(find.text('750 Mmk'), findsOneWidget);
     expect(find.text('Salary'), findsOneWidget);
-    expect(find.text('Food'), findsOneWidget);
+    expect(find.text('Food'), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey('analytics_tab')));
     await tester.pumpAndSettle();
@@ -55,6 +55,24 @@ void main() {
     expect(find.text('Edit transaction'), findsOneWidget);
     expect(find.text('Delete transaction'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('history_category_filter')));
+    await tester.pumpAndSettle();
+    expect(find.text('Filter by category'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('history_category_2')));
+    await tester.pumpAndSettle();
+    expect(find.text('Food'), findsWidgets);
+    expect(find.text('Salary'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('clear_history_filters')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('history_date_filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last 7 days'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('clear_history_filters')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('clear_history_filters')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('ledger_filter_income')));

@@ -284,6 +284,13 @@ void main() {
       expect(dashboard.state.recentTransactions.first.categoryName, 'Food');
       expect(dashboard.state.categories, isNotEmpty);
 
+      await ledger.setCategory(expenseCategoryId);
+      await ledger.setDateRange(reference, reference);
+      expect(ledger.state.activeFilterCount, 2);
+      expect(ledger.state.transactions, hasLength(1));
+      await ledger.clearAdvancedFilters();
+      expect(ledger.state.activeFilterCount, 0);
+
       await ledger.showPreviousMonth();
       expect(ledger.state.activeMonth, DateTime(2026, 8));
       await ledger.setFilter(LedgerTypeFilter.income);

@@ -63,15 +63,25 @@ class UserGuideScreen extends StatelessWidget {
                       children: [
                         _GuideStep(
                           number: '4',
+                          icon: CupertinoIcons.chart_bar,
+                          title: 'Set monthly limits',
+                          message:
+                              'On Home, tap Manage beside Monthly budgets. '
+                              'Choose a category, enter its limit, and select '
+                              'when Kyat Flow should warn you. The summary shows '
+                              'your total plan and unallocated salary.',
+                        ),
+                        _GuideStep(
+                          number: '5',
                           icon: CupertinoIcons.chart_pie,
                           title: 'Review your spending',
                           message:
                               'Use Analytics to compare This Week and This Month. '
-                              'In History, move between months, filter entries, '
-                              'or tap a transaction to edit or delete it.',
+                              'In History, filter by type, exact dates, or category. '
+                              'Tap a transaction to edit or delete it.',
                         ),
                         _GuideStep(
-                          number: '5',
+                          number: '6',
                           icon: CupertinoIcons.square_arrow_up,
                           title: 'Keep a backup',
                           message:

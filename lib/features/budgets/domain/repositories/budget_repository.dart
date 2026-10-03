@@ -22,3 +22,19 @@ class BudgetNotFoundException implements Exception {
   @override
   String toString() => 'Budget $id was not found.';
 }
+
+class BudgetAlreadyExistsException implements Exception {
+  const BudgetAlreadyExistsException({
+    required this.categoryId,
+    required this.month,
+    required this.year,
+  });
+
+  final int categoryId;
+  final int month;
+  final int year;
+
+  @override
+  String toString() =>
+      'A budget already exists for category $categoryId in $month/$year.';
+}

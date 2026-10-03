@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kyatflow/core/database/database_helper.dart';
 import 'package:kyatflow/features/budgets/data/repositories/sqlite_budget_repository.dart';
 import 'package:kyatflow/features/budgets/domain/entities/budget.dart';
+import 'package:kyatflow/features/budgets/domain/repositories/budget_repository.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -74,5 +75,25 @@ void main() {
     expect(revisions, [1, 2, 3]);
 
     await subscription.cancel();
+  });
+
+  test('reports a duplicate category budget as a domain error', () async {
+    final draft = BudgetDraft(
+      categoryId: categoryId,
+      amountLimit: 1000,
+      month: 10,
+      year: 2026,
+    );
+    await repository.insert(draft);
+
+    await expectLater(
+      repository.insert(draft),
+      throwsA(
+        isA<BudgetAlreadyExistsException>()
+            .having((error) => error.categoryId, 'categoryId', categoryId)
+            .having((error) => error.month, 'month', 10)
+            .having((error) => error.year, 'year', 2026),
+      ),
+    );
   });
 }

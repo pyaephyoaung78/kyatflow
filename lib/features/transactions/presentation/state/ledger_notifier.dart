@@ -11,11 +11,11 @@ class LedgerNotifier extends StateNotifier<LedgerState> {
     DateTime Function()? clock,
   }) {
     final effectiveClock = clock ?? DateTime.now;
-    return LedgerNotifier._(repository, effectiveClock());
+    return LedgerNotifier._(repository, effectiveClock);
   }
 
-  LedgerNotifier._(this._repository, DateTime now)
-    : super(LedgerState.initial(now)) {
+  LedgerNotifier._(this._repository, this._clock)
+    : super(LedgerState.initial(_clock())) {
     _subscription = _repository.changes.listen((_) {
       unawaited(refresh(showLoading: false));
     });
@@ -23,12 +23,17 @@ class LedgerNotifier extends StateNotifier<LedgerState> {
   }
 
   final TransactionRepository _repository;
+  final DateTime Function() _clock;
   late final StreamSubscription<int> _subscription;
   int _generation = 0;
 
   Future<void> showPreviousMonth() {
     final month = state.activeMonth;
-    state = state.copyWith(activeMonth: DateTime(month.year, month.month - 1));
+    state = state.copyWith(
+      activeMonth: DateTime(month.year, month.month - 1),
+      customStart: null,
+      customEnd: null,
+    );
     return refresh();
   }
 
@@ -38,6 +43,8 @@ class LedgerNotifier extends StateNotifier<LedgerState> {
     final next = DateTime(month.year, month.month + 1);
     state = state.copyWith(
       activeMonth: next.isAfter(state.latestMonth) ? state.latestMonth : next,
+      customStart: null,
+      customEnd: null,
     );
     return refresh();
   }
@@ -55,17 +62,71 @@ class LedgerNotifier extends StateNotifier<LedgerState> {
     await refresh();
   }
 
+  Future<void> setCategory(int? categoryId) async {
+    if (state.categoryId == categoryId) return;
+    state = state.copyWith(categoryId: categoryId, error: null);
+    await refresh();
+  }
+
+  Future<void> showToday() {
+    final now = _clock();
+    final start = DateTime(now.year, now.month, now.day);
+    return setDateRange(start, start);
+  }
+
+  Future<void> showLastSevenDays() {
+    final now = _clock();
+    final endDay = DateTime(now.year, now.month, now.day);
+    return setDateRange(endDay.subtract(const Duration(days: 6)), endDay);
+  }
+
+  Future<void> setDateRange(DateTime start, DateTime inclusiveEnd) {
+    final normalizedStart = DateTime(start.year, start.month, start.day);
+    final normalizedEnd = DateTime(
+      inclusiveEnd.year,
+      inclusiveEnd.month,
+      inclusiveEnd.day + 1,
+    );
+    if (!normalizedStart.isBefore(normalizedEnd)) {
+      throw ArgumentError('start must not be after end');
+    }
+    state = state.copyWith(
+      customStart: normalizedStart,
+      customEnd: normalizedEnd,
+      error: null,
+    );
+    return refresh();
+  }
+
+  Future<void> clearDateRange() {
+    if (!state.hasCustomDateRange) return Future<void>.value();
+    state = state.copyWith(customStart: null, customEnd: null, error: null);
+    return refresh();
+  }
+
+  Future<void> clearAdvancedFilters() async {
+    if (!state.hasCustomDateRange && state.categoryId == null) return;
+    state = state.copyWith(
+      categoryId: null,
+      customStart: null,
+      customEnd: null,
+      error: null,
+    );
+    await refresh();
+  }
+
   Future<void> refresh({bool showLoading = true}) async {
     final generation = ++_generation;
     final filter = state.filter;
-    final start = state.activeMonth;
-    final end = DateTime(start.year, start.month + 1);
+    final start = state.queryStart;
+    final end = state.queryEnd;
     if (showLoading || state.status == LedgerLoadStatus.initial) {
       state = state.copyWith(status: LedgerLoadStatus.loading, error: null);
     }
     try {
       final transactions = await _repository.getLedgerTransactions(
         type: filter.transactionType,
+        categoryId: state.categoryId,
         start: start,
         end: end,
       );

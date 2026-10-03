@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:sqflite/sqflite.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../domain/entities/budget.dart';
@@ -18,27 +19,51 @@ class SqliteBudgetRepository implements BudgetRepository {
 
   @override
   Future<int> insert(BudgetDraft budget) async {
-    final id = await _databaseHelper.insertBudget(
-      categoryId: budget.categoryId,
-      amountLimit: budget.amountLimit,
-      month: budget.month,
-      year: budget.year,
-      alertPercentage: budget.alertPercentage,
-    );
+    late final int id;
+    try {
+      id = await _databaseHelper.insertBudget(
+        categoryId: budget.categoryId,
+        amountLimit: budget.amountLimit,
+        month: budget.month,
+        year: budget.year,
+        alertPercentage: budget.alertPercentage,
+      );
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        throw BudgetAlreadyExistsException(
+          categoryId: budget.categoryId,
+          month: budget.month,
+          year: budget.year,
+        );
+      }
+      rethrow;
+    }
     _publishChange();
     return id;
   }
 
   @override
   Future<void> edit(Budget budget) async {
-    final affected = await _databaseHelper.updateBudget(
-      id: budget.id,
-      categoryId: budget.categoryId,
-      amountLimit: budget.amountLimit,
-      month: budget.month,
-      year: budget.year,
-      alertPercentage: budget.alertPercentage,
-    );
+    late final int affected;
+    try {
+      affected = await _databaseHelper.updateBudget(
+        id: budget.id,
+        categoryId: budget.categoryId,
+        amountLimit: budget.amountLimit,
+        month: budget.month,
+        year: budget.year,
+        alertPercentage: budget.alertPercentage,
+      );
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        throw BudgetAlreadyExistsException(
+          categoryId: budget.categoryId,
+          month: budget.month,
+          year: budget.year,
+        );
+      }
+      rethrow;
+    }
     if (affected == 0) throw BudgetNotFoundException(budget.id);
     _publishChange();
   }
