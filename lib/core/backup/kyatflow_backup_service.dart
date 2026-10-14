@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../database/database_helper.dart';
+import '../utils/recurrence_schedule.dart';
 
 typedef BackupDirectoryProvider = Future<Directory> Function();
 typedef BackupShareInvoker = Future<ShareResult> Function(ShareParams params);
@@ -156,7 +157,8 @@ class KyatFlowBackupDocument {
   KyatFlowBackupDocument({required this.generatedAt, required this.snapshot});
 
   static const formatName = 'kyatflow-backup';
-  static const formatVersion = 1;
+  static const formatVersion = 2;
+  static const minimumSupportedFormatVersion = 1;
 
   final DateTime generatedAt;
   final DatabaseBackupSnapshot snapshot;
@@ -191,7 +193,7 @@ class KyatFlowBackupDocument {
       root['format_version'],
       'format_version',
     );
-    if (version != formatVersion) {
+    if (version < minimumSupportedFormatVersion || version > formatVersion) {
       throw BackupValidationException(
         'Backup version $version is not supported by this app.',
       );
@@ -216,7 +218,10 @@ class KyatFlowBackupDocument {
       );
     }
     final data = _BackupValidator.object(root['data'], 'data');
-    final validator = _BackupValidator();
+    final validator = _BackupValidator(
+      legacyReference: generatedAt,
+      allowLegacyRecurringFields: version == 1,
+    );
     final snapshot = validator.snapshot(data);
     return KyatFlowBackupDocument(generatedAt: generatedAt, snapshot: snapshot);
   }
@@ -260,6 +265,13 @@ class BackupValidationException implements Exception {
 }
 
 class _BackupValidator {
+  _BackupValidator({
+    required this.legacyReference,
+    required this.allowLegacyRecurringFields,
+  });
+
+  final DateTime legacyReference;
+  final bool allowLegacyRecurringFields;
   final _categoryIds = <int>{};
   final _categoryTypes = <int, String>{};
 
@@ -373,6 +385,44 @@ class _BackupValidator {
         '$path.last_executed must be an integer or null.',
       );
     }
+    final firstDueValue = row['first_due'];
+    final nextDueValue = row['next_due'];
+    final activeValue = row['is_active'];
+    if (!allowLegacyRecurringFields &&
+        (firstDueValue == null ||
+            nextDueValue == null ||
+            activeValue == null)) {
+      throw BackupValidationException(
+        '$path is missing recurring schedule fields.',
+      );
+    }
+    final firstDue = firstDueValue == null
+        ? (lastExecuted as int?) ?? legacyReference.millisecondsSinceEpoch
+        : integer(firstDueValue, '$path.first_due');
+    final nextDue = nextDueValue == null
+        ? lastExecuted == null
+              ? firstDue
+              : RecurrenceSchedule.nextOccurrence(
+                  DateTime.fromMillisecondsSinceEpoch(lastExecuted as int),
+                  frequency,
+                  anchor: DateTime.fromMillisecondsSinceEpoch(firstDue),
+                ).millisecondsSinceEpoch
+        : integer(nextDueValue, '$path.next_due');
+    if (nextDue < firstDue) {
+      throw BackupValidationException(
+        '$path.next_due must not be before first_due.',
+      );
+    }
+    final active = activeValue == null
+        ? 1
+        : integer(activeValue, '$path.is_active');
+    if (active != 0 && active != 1) {
+      throw BackupValidationException('$path.is_active must be 0 or 1.');
+    }
+    final note = row['note'];
+    if (note != null && note is! String) {
+      throw BackupValidationException('$path.note must be text or null.');
+    }
     return {
       'id': positiveInteger(row['id'], '$path.id'),
       'name': nonEmptyString(row['name'], '$path.name'),
@@ -380,7 +430,11 @@ class _BackupValidator {
       'category_id': categoryId,
       'type': type,
       'frequency': frequency,
+      'first_due': firstDue,
+      'next_due': nextDue,
       'last_executed': lastExecuted,
+      'is_active': active,
+      'note': note,
     };
   }
 

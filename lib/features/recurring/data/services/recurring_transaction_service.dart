@@ -1,21 +1,5 @@
 import '../../../../core/database/database_helper.dart';
-
-enum RecurringFrequency {
-  daily,
-  weekly,
-  monthly,
-  yearly;
-
-  static RecurringFrequency fromDatabase(String value) {
-    return switch (value) {
-      'daily' => RecurringFrequency.daily,
-      'weekly' => RecurringFrequency.weekly,
-      'monthly' => RecurringFrequency.monthly,
-      'yearly' => RecurringFrequency.yearly,
-      _ => throw FormatException('Unknown recurring frequency: $value'),
-    };
-  }
-}
+import '../../../../core/utils/recurrence_schedule.dart';
 
 class RecurringExecutionResult {
   const RecurringExecutionResult({
@@ -51,27 +35,25 @@ class RecurringTransactionService {
     final now = _clock();
     final database = await _databaseHelper.database;
     return database.transaction((txn) async {
-      final rules = await txn.query('recurring_rules', orderBy: 'id ASC');
+      final rules = await txn.query(
+        'recurring_rules',
+        where: 'is_active = 1',
+        orderBy: 'next_due ASC, id ASC',
+      );
       var rulesExecuted = 0;
       var transactionsCreated = 0;
 
       for (final rule in rules) {
-        final frequency = RecurringFrequency.fromDatabase(
-          rule['frequency'] as String,
+        final frequency = rule['frequency'] as String;
+        final firstDue = DateTime.fromMillisecondsSinceEpoch(
+          rule['first_due'] as int,
+          isUtc: now.isUtc,
         );
-        final lastExecutedMillis = rule['last_executed'] as int?;
-        var occurrence = lastExecutedMillis == null
-            ? now
-            : _nextOccurrence(
-                _startOfDay(
-                  DateTime.fromMillisecondsSinceEpoch(
-                    lastExecutedMillis,
-                    isUtc: now.isUtc,
-                  ),
-                ),
-                frequency,
-              );
-        var latestExecution = lastExecutedMillis == null ? null : occurrence;
+        var occurrence = DateTime.fromMillisecondsSinceEpoch(
+          rule['next_due'] as int,
+          isUtc: now.isUtc,
+        );
+        DateTime? latestExecution;
         var ruleTransactionCount = 0;
 
         while (!occurrence.isAfter(now)) {
@@ -86,18 +68,25 @@ class RecurringTransactionService {
             'type': rule['type'],
             'category_id': rule['category_id'],
             'timestamp': occurrence.millisecondsSinceEpoch,
-            'note': 'Recurring: ${rule['name']}',
+            'note': _transactionNote(rule),
           });
           latestExecution = occurrence;
           ruleTransactionCount++;
           transactionsCreated++;
-          occurrence = _nextOccurrence(occurrence, frequency);
+          occurrence = RecurrenceSchedule.nextOccurrence(
+            occurrence,
+            frequency,
+            anchor: firstDue,
+          );
         }
 
         if (ruleTransactionCount > 0) {
           await txn.update(
             'recurring_rules',
-            {'last_executed': latestExecution!.millisecondsSinceEpoch},
+            {
+              'last_executed': latestExecution!.millisecondsSinceEpoch,
+              'next_due': occurrence.millisecondsSinceEpoch,
+            },
             where: 'id = ?',
             whereArgs: [rule['id']],
           );
@@ -112,72 +101,10 @@ class RecurringTransactionService {
     });
   }
 
-  DateTime _startOfDay(DateTime value) {
-    return value.isUtc
-        ? DateTime.utc(value.year, value.month, value.day)
-        : DateTime(value.year, value.month, value.day);
-  }
-
-  DateTime _nextOccurrence(DateTime previous, RecurringFrequency frequency) {
-    return switch (frequency) {
-      RecurringFrequency.daily => _dateLike(
-        previous,
-        previous.year,
-        previous.month,
-        previous.day + 1,
-      ),
-      RecurringFrequency.weekly => _dateLike(
-        previous,
-        previous.year,
-        previous.month,
-        previous.day + 7,
-      ),
-      RecurringFrequency.monthly => _nextMonth(previous),
-      RecurringFrequency.yearly => _nextYear(previous),
-    };
-  }
-
-  DateTime _nextMonth(DateTime previous) {
-    final firstOfTarget = previous.month == 12
-        ? (year: previous.year + 1, month: 1)
-        : (year: previous.year, month: previous.month + 1);
-    final day = previous.day.clamp(
-      1,
-      _daysInMonth(firstOfTarget.year, firstOfTarget.month),
-    );
-    return _dateLike(previous, firstOfTarget.year, firstOfTarget.month, day);
-  }
-
-  DateTime _nextYear(DateTime previous) {
-    final year = previous.year + 1;
-    final day = previous.day.clamp(1, _daysInMonth(year, previous.month));
-    return _dateLike(previous, year, previous.month, day);
-  }
-
-  int _daysInMonth(int year, int month) => DateTime.utc(year, month + 1, 0).day;
-
-  DateTime _dateLike(DateTime source, int year, int month, int day) {
-    if (source.isUtc) {
-      return DateTime.utc(
-        year,
-        month,
-        day,
-        source.hour,
-        source.minute,
-        source.second,
-        source.millisecond,
-        source.microsecond,
-      );
-    }
-    return DateTime(
-      year,
-      month,
-      day,
-      source.hour,
-      source.minute,
-      source.second,
-      source.millisecond,
-      source.microsecond,
-    );
+  String _transactionNote(Map<String, Object?> rule) {
+    final note = (rule['note'] as String?)?.trim();
+    return note == null || note.isEmpty
+        ? 'Recurring: ${rule['name']}'
+        : 'Recurring: ${rule['name']} · $note';
   }
 }

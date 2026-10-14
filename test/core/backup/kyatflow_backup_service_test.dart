@@ -178,6 +178,51 @@ void main() {
       ),
     );
   });
+
+  test('reads version 1 backups and upgrades recurring schedules', () {
+    final lastExecuted = DateTime(2026, 1, 31).millisecondsSinceEpoch;
+    final data = {
+      'format': KyatFlowBackupDocument.formatName,
+      'format_version': 1,
+      'database_schema_version': 4,
+      'generated_at': '2026-10-14T09:00:00.000',
+      'data': {
+        'categories': [
+          {
+            'id': 1,
+            'name': 'Bills',
+            'icon': 'receipt_long',
+            'color': 0xFF123456,
+            'type': 'expense',
+            'is_archived': 0,
+          },
+        ],
+        'transactions': <Object?>[],
+        'budgets': <Object?>[],
+        'recurring_rules': [
+          {
+            'id': 1,
+            'name': 'Internet',
+            'amount': 30000,
+            'category_id': 1,
+            'type': 'expense',
+            'frequency': 'monthly',
+            'last_executed': lastExecuted,
+          },
+        ],
+      },
+    };
+    final service = KyatFlowBackupService(databaseHelper: destination);
+    final backup = service.readBackup(
+      Uint8List.fromList(utf8.encode(jsonEncode(data))),
+    );
+    final rule = backup.document.snapshot.recurringRules.single;
+
+    expect(rule['first_due'], lastExecuted);
+    expect(rule['next_due'], DateTime(2026, 2, 28).millisecondsSinceEpoch);
+    expect(rule['is_active'], 1);
+    expect(rule['note'], isNull);
+  });
 }
 
 Future<void> _addSourceRecords(DatabaseHelper database) async {

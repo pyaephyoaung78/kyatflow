@@ -35,6 +35,7 @@ void main() {
       categoryId: expenseCategoryId,
       type: 'expense',
       frequency: 'monthly',
+      firstDue: now,
     );
     final service = RecurringTransactionService(
       databaseHelper: database,
@@ -56,6 +57,10 @@ void main() {
       (await database.getRecurringRules()).single['last_executed'],
       now.millisecondsSinceEpoch,
     );
+    expect(
+      (await database.getRecurringRules()).single['next_due'],
+      DateTime.utc(2026, 11, 1, 8, 30).millisecondsSinceEpoch,
+    );
   });
 
   test('monthly rule catches up each missed occurrence', () async {
@@ -65,6 +70,7 @@ void main() {
       categoryId: expenseCategoryId,
       type: 'expense',
       frequency: 'monthly',
+      firstDue: DateTime.utc(2026, 7, 31, 9),
       lastExecuted: DateTime.utc(2026, 7, 31, 9),
     );
     final result = await RecurringTransactionService(
@@ -76,12 +82,61 @@ void main() {
     expect(result.transactionsCreated, 2);
     final transactions = await database.getTransactions();
     expect(transactions.map((row) => row['timestamp']), [
-      DateTime.utc(2026, 9, 30).millisecondsSinceEpoch,
-      DateTime.utc(2026, 8, 31).millisecondsSinceEpoch,
+      DateTime.utc(2026, 9, 30, 9).millisecondsSinceEpoch,
+      DateTime.utc(2026, 8, 31, 9).millisecondsSinceEpoch,
     ]);
     expect(
       (await database.getRecurringRules()).single['last_executed'],
-      DateTime.utc(2026, 9, 30).millisecondsSinceEpoch,
+      DateTime.utc(2026, 9, 30, 9).millisecondsSinceEpoch,
+    );
+    expect(
+      (await database.getRecurringRules()).single['next_due'],
+      DateTime.utc(2026, 10, 31, 9).millisecondsSinceEpoch,
+    );
+  });
+
+  test('paused rules do not create transactions', () async {
+    final due = DateTime.utc(2026, 10, 1, 8);
+    await database.insertRecurringRule(
+      name: 'Paused rent',
+      amount: 200000,
+      categoryId: expenseCategoryId,
+      type: 'expense',
+      frequency: 'monthly',
+      firstDue: due,
+      nextDue: due,
+      isActive: false,
+    );
+
+    final result = await RecurringTransactionService(
+      databaseHelper: database,
+      clock: () => DateTime.utc(2026, 10, 2),
+    ).executeDueTransactions();
+
+    expect(result.transactionsCreated, 0);
+    expect(await database.getTransactions(), isEmpty);
+  });
+
+  test('custom rule note is included in generated transactions', () async {
+    final due = DateTime.utc(2026, 10, 1, 8);
+    await database.insertRecurringRule(
+      name: 'Internet',
+      amount: 30000,
+      categoryId: expenseCategoryId,
+      type: 'expense',
+      frequency: 'monthly',
+      firstDue: due,
+      note: 'Fiber plan',
+    );
+
+    await RecurringTransactionService(
+      databaseHelper: database,
+      clock: () => due,
+    ).executeDueTransactions();
+
+    expect(
+      (await database.getTransactions()).single['note'],
+      'Recurring: Internet · Fiber plan',
     );
   });
 }

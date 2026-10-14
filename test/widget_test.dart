@@ -111,6 +111,12 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('manage_recurring_rules')));
+    await tester.pumpAndSettle();
+    expect(find.text('Recurring transactions'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('backup_restore')),
       180,

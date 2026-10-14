@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../utils/recurrence_schedule.dart';
+
 /// Owns KyatFlow's local SQLite connection and persistence operations.
 ///
 /// Types are `income` or `expense`. Icons are stable string keys, colors are
@@ -12,7 +14,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const databaseName = 'kyatflow.db';
-  static const databaseVersion = 4;
+  static const databaseVersion = 5;
 
   DatabaseFactory? _factory;
   String? _path;
@@ -131,6 +133,67 @@ class DatabaseHelper {
         ON categories (is_archived, type, name, id)
       ''');
     }
+    if (oldVersion < 5) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(recurring_rules)',
+      )).map((row) => row['name'] as String).toSet();
+      if (!columns.contains('first_due')) {
+        await db.execute(
+          'ALTER TABLE recurring_rules '
+          'ADD COLUMN first_due INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!columns.contains('next_due')) {
+        await db.execute(
+          'ALTER TABLE recurring_rules '
+          'ADD COLUMN next_due INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!columns.contains('is_active')) {
+        await db.execute(
+          'ALTER TABLE recurring_rules '
+          'ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 '
+          'CHECK (is_active IN (0, 1))',
+        );
+      }
+      if (!columns.contains('note')) {
+        await db.execute('ALTER TABLE recurring_rules ADD COLUMN note TEXT');
+      }
+      final now = DateTime.now();
+      final rules = await db.query(
+        'recurring_rules',
+        where: 'first_due = 0 OR next_due = 0',
+      );
+      for (final rule in rules) {
+        final lastMilliseconds = rule['last_executed'] as int?;
+        final firstDue = lastMilliseconds == null
+            ? now
+            : DateTime.fromMillisecondsSinceEpoch(
+                lastMilliseconds,
+                isUtc: now.isUtc,
+              );
+        final nextDue = lastMilliseconds == null
+            ? firstDue
+            : RecurrenceSchedule.nextOccurrence(
+                firstDue,
+                rule['frequency'] as String,
+                anchor: firstDue,
+              );
+        await db.update(
+          'recurring_rules',
+          {
+            'first_due': firstDue.millisecondsSinceEpoch,
+            'next_due': nextDue.millisecondsSinceEpoch,
+          },
+          where: 'id = ?',
+          whereArgs: [rule['id']],
+        );
+      }
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_recurring_rules_active_next_due
+        ON recurring_rules (is_active, next_due, id)
+      ''');
+    }
   }
 
   void _createBudgetingTables(Batch batch) {
@@ -161,7 +224,12 @@ class DatabaseHelper {
         type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
         frequency TEXT NOT NULL
           CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
+        first_due INTEGER NOT NULL,
+        next_due INTEGER NOT NULL,
         last_executed INTEGER,
+        is_active INTEGER NOT NULL DEFAULT 1
+          CHECK (is_active IN (0, 1)),
+        note TEXT,
         FOREIGN KEY (category_id, type) REFERENCES categories (id, type)
           ON UPDATE RESTRICT ON DELETE RESTRICT
       )
@@ -173,6 +241,10 @@ class DatabaseHelper {
     batch.execute('''
       CREATE INDEX idx_recurring_rules_category
       ON recurring_rules (category_id, id)
+    ''');
+    batch.execute('''
+      CREATE INDEX idx_recurring_rules_active_next_due
+      ON recurring_rules (is_active, next_due, id)
     ''');
   }
 
@@ -599,15 +671,33 @@ class DatabaseHelper {
     required int categoryId,
     required String type,
     required String frequency,
+    DateTime? firstDue,
+    DateTime? nextDue,
     DateTime? lastExecuted,
+    bool isActive = true,
+    String? note,
   }) async {
+    final effectiveFirstDue = firstDue ?? lastExecuted ?? DateTime.now();
+    final effectiveNextDue =
+        nextDue ??
+        (lastExecuted == null
+            ? effectiveFirstDue
+            : RecurrenceSchedule.nextOccurrence(
+                lastExecuted,
+                frequency,
+                anchor: effectiveFirstDue,
+              ));
     final values = _recurringRuleValues(
       name,
       amount,
       categoryId,
       type,
       frequency,
+      effectiveFirstDue,
+      effectiveNextDue,
       lastExecuted,
+      isActive,
+      note,
     );
     return (await database).insert('recurring_rules', values);
   }
@@ -619,15 +709,33 @@ class DatabaseHelper {
     required int categoryId,
     required String type,
     required String frequency,
+    DateTime? firstDue,
+    DateTime? nextDue,
     DateTime? lastExecuted,
+    bool isActive = true,
+    String? note,
   }) async {
+    final effectiveFirstDue = firstDue ?? lastExecuted ?? DateTime.now();
+    final effectiveNextDue =
+        nextDue ??
+        (lastExecuted == null
+            ? effectiveFirstDue
+            : RecurrenceSchedule.nextOccurrence(
+                lastExecuted,
+                frequency,
+                anchor: effectiveFirstDue,
+              ));
     final values = _recurringRuleValues(
       name,
       amount,
       categoryId,
       type,
       frequency,
+      effectiveFirstDue,
+      effectiveNextDue,
       lastExecuted,
+      isActive,
+      note,
     );
     return (await database).update(
       'recurring_rules',
@@ -639,6 +747,28 @@ class DatabaseHelper {
 
   Future<List<Map<String, Object?>>> getRecurringRules() async {
     return (await database).query('recurring_rules', orderBy: 'id ASC');
+  }
+
+  Future<List<Map<String, Object?>>> getRecurringRuleDetails() async {
+    return (await database).rawQuery('''
+      SELECT
+        r.*,
+        c.name AS category_name,
+        c.icon AS category_icon,
+        c.color AS category_color
+      FROM recurring_rules AS r
+      INNER JOIN categories AS c ON c.id = r.category_id
+      ORDER BY r.is_active DESC, r.next_due ASC, r.id ASC
+    ''');
+  }
+
+  Future<int> setRecurringRuleActive(int id, {required bool active}) async {
+    return (await database).update(
+      'recurring_rules',
+      {'is_active': active ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<int> deleteRecurringRule(int id) async {
@@ -811,16 +941,19 @@ class DatabaseHelper {
     }
 
     final localRules = await txn.query('recurring_rules');
-    final ruleIdentities = <(String, double, int, String, String)>{
-      for (final row in localRules)
-        (
-          (row['name'] as String).trim().toLowerCase(),
-          (row['amount'] as num).toDouble(),
-          row['category_id'] as int,
-          row['type'] as String,
-          row['frequency'] as String,
-        ),
-    };
+    final ruleIdentities =
+        <(String, double, int, String, String, int, String?)>{
+          for (final row in localRules)
+            (
+              (row['name'] as String).trim().toLowerCase(),
+              (row['amount'] as num).toDouble(),
+              row['category_id'] as int,
+              row['type'] as String,
+              row['frequency'] as String,
+              row['first_due'] as int,
+              row['note'] as String?,
+            ),
+        };
     for (final row in snapshot.recurringRules) {
       final destinationCategoryId = categoryIds[row['category_id'] as int]!;
       final identity = (
@@ -829,6 +962,8 @@ class DatabaseHelper {
         destinationCategoryId,
         row['type'] as String,
         row['frequency'] as String,
+        row['first_due'] as int,
+        row['note'] as String?,
       );
       if (!ruleIdentities.add(identity)) {
         skipped++;
@@ -999,7 +1134,11 @@ class DatabaseHelper {
     int categoryId,
     String type,
     String frequency,
+    DateTime firstDue,
+    DateTime nextDue,
     DateTime? lastExecuted,
+    bool isActive,
+    String? note,
   ) {
     _validateType(type);
     _validateFrequency(frequency);
@@ -1013,13 +1152,20 @@ class DatabaseHelper {
         'Must be finite and positive',
       );
     }
+    if (nextDue.isBefore(firstDue)) {
+      throw ArgumentError('nextDue must not be before firstDue');
+    }
     return {
       'name': name.trim(),
       'amount': amount,
       'category_id': categoryId,
       'type': type,
       'frequency': frequency,
+      'first_due': firstDue.millisecondsSinceEpoch,
+      'next_due': nextDue.millisecondsSinceEpoch,
       'last_executed': lastExecuted?.millisecondsSinceEpoch,
+      'is_active': isActive ? 1 : 0,
+      'note': note?.trim().isEmpty ?? true ? null : note!.trim(),
     };
   }
 

@@ -115,8 +115,13 @@ class CsvBackupEncoder {
     'year',
     'alert_percentage',
     'frequency',
+    'first_due_epoch_ms',
+    'first_due_iso8601',
+    'next_due_epoch_ms',
+    'next_due_iso8601',
     'last_executed_epoch_ms',
     'last_executed_iso8601',
+    'is_active',
   ];
 
   String encode(DatabaseBackupSnapshot snapshot) {
@@ -163,6 +168,8 @@ class CsvBackupEncoder {
       );
     }
     for (final rule in snapshot.recurringRules) {
+      final firstDue = rule['first_due'] as int;
+      final nextDue = rule['next_due'] as int;
       final lastExecuted = rule['last_executed'] as int?;
       rows.add(
         _row({
@@ -173,10 +180,16 @@ class CsvBackupEncoder {
           'amount': rule['amount'],
           'category_id': rule['category_id'],
           'frequency': rule['frequency'],
+          'note': rule['note'],
+          'first_due_epoch_ms': firstDue,
+          'first_due_iso8601': _iso8601(firstDue),
+          'next_due_epoch_ms': nextDue,
+          'next_due_iso8601': _iso8601(nextDue),
           'last_executed_epoch_ms': lastExecuted,
           'last_executed_iso8601': lastExecuted == null
               ? null
               : _iso8601(lastExecuted),
+          'is_active': rule['is_active'],
         }),
       );
     }

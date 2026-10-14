@@ -73,6 +73,16 @@ class UserGuideScreen extends StatelessWidget {
                         ),
                         _GuideStep(
                           number: '5',
+                          icon: CupertinoIcons.repeat,
+                          title: 'Automate regular entries',
+                          message:
+                              'Open Settings → Recurring transactions to '
+                              'schedule salary, rent, internet, subscriptions, '
+                              'or other regular entries. Pause a rule without '
+                              'losing its schedule.',
+                        ),
+                        _GuideStep(
+                          number: '6',
                           icon: CupertinoIcons.chart_pie,
                           title: 'Review your spending',
                           message:
@@ -81,7 +91,7 @@ class UserGuideScreen extends StatelessWidget {
                               'Tap a transaction to edit or delete it.',
                         ),
                         _GuideStep(
-                          number: '6',
+                          number: '7',
                           icon: CupertinoIcons.square_arrow_up,
                           title: 'Keep a backup',
                           message:

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/finance_widgets.dart';
+import '../../../recurring/presentation/screens/recurring_rules_screen.dart';
 import 'backup_restore_screen.dart';
 import 'category_management_screen.dart';
 import 'user_guide_screen.dart';
@@ -64,6 +65,15 @@ class SettingsScreen extends StatelessWidget {
               MaterialPageRoute(
                 builder: (_) => const CategoryManagementScreen(),
               ),
+            ),
+          ),
+          _SettingsLinkRow(
+            key: const ValueKey('manage_recurring_rules'),
+            icon: CupertinoIcons.repeat,
+            title: 'Recurring transactions',
+            value: 'Automate salary, rent, bills, and subscriptions',
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const RecurringRulesScreen()),
             ),
           ),
         ],

@@ -53,6 +53,11 @@ String formatShortDate(DateTime date) {
   return '$month ${date.day}';
 }
 
+String formatFullDate(DateTime date) {
+  final month = _monthNames[date.month - 1].substring(0, 3);
+  return '$month ${date.day}, ${date.year}';
+}
+
 String formatDateRange(DateTime start, DateTime exclusiveEnd) {
   final end = exclusiveEnd.subtract(const Duration(days: 1));
   if (start.year == end.year &&

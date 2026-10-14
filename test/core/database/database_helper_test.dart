@@ -57,7 +57,7 @@ void main() {
         connections.every((db) => identical(db, connections.first)),
         isTrue,
       );
-      expect(await connections.first.getVersion(), 4);
+      expect(await connections.first.getVersion(), 5);
       expect(
         (await connections.first.rawQuery(
           'PRAGMA foreign_keys',
@@ -465,12 +465,19 @@ void main() {
       categoryId: bills,
       type: 'expense',
       frequency: 'monthly',
+      firstDue: DateTime.utc(2026, 9, 1),
+      nextDue: DateTime.utc(2026, 10, 1),
       lastExecuted: DateTime.utc(2026, 8, 1),
+      note: 'Account 1234',
     );
     var rule = (await helper.getRecurringRules()).single;
     expect(rule['id'], id);
     expect(rule['name'], 'Home internet');
     expect(rule['frequency'], 'monthly');
+    expect(rule['first_due'], DateTime.utc(2026, 9, 1).millisecondsSinceEpoch);
+    expect(rule['next_due'], DateTime.utc(2026, 10, 1).millisecondsSinceEpoch);
+    expect(rule['is_active'], 1);
+    expect(rule['note'], 'Account 1234');
 
     expect(
       await helper.updateRecurringRule(
@@ -500,6 +507,47 @@ void main() {
     expect(await helper.getRecurringRules(), isEmpty);
   });
 
+  test('version 4 recurring rules migrate with their next due date', () async {
+    final path = p.join(directory.path, 'test.db');
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 4,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE recurring_rules (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              amount REAL NOT NULL,
+              category_id INTEGER NOT NULL,
+              type TEXT NOT NULL,
+              frequency TEXT NOT NULL,
+              last_executed INTEGER
+            )
+          ''');
+          await db.insert('recurring_rules', {
+            'name': 'Legacy rent',
+            'amount': 200000,
+            'category_id': 1,
+            'type': 'expense',
+            'frequency': 'monthly',
+            'last_executed': DateTime.utc(2026, 1, 31).millisecondsSinceEpoch,
+          });
+        },
+      ),
+    );
+    await legacy.close();
+
+    final migrated = await helper.database;
+    final rule = (await migrated.query('recurring_rules')).single;
+
+    expect(await migrated.getVersion(), 5);
+    expect(rule['first_due'], DateTime.utc(2026, 1, 31).millisecondsSinceEpoch);
+    expect(rule['next_due'], DateTime.utc(2026, 2, 28).millisecondsSinceEpoch);
+    expect(rule['is_active'], 1);
+    expect(rule['note'], isNull);
+  });
+
   test('common queries use the intended indexes', () async {
     final db = await helper.database;
     final queries = {
@@ -515,6 +563,8 @@ void main() {
           'SELECT * FROM budgets WHERE year = 2026 AND month = 9 ORDER BY category_id',
       'idx_recurring_rules_last_executed':
           'SELECT * FROM recurring_rules ORDER BY last_executed, id',
+      'idx_recurring_rules_active_next_due':
+          'SELECT * FROM recurring_rules WHERE is_active = 1 ORDER BY next_due, id',
     };
     for (final entry in queries.entries) {
       final plan = await db.rawQuery('EXPLAIN QUERY PLAN ${entry.value}');
@@ -535,17 +585,15 @@ void main() {
     expect(await helper.getCategories(), hasLength(10));
   });
 
-  test(
-    'version 4 migration preserves data and adds category archiving',
-    () async {
-      await helper.close();
-      final legacyPath = p.join(directory.path, 'legacy.db');
-      final legacyDatabase = await databaseFactoryFfi.openDatabase(
-        legacyPath,
-        options: OpenDatabaseOptions(
-          version: 2,
-          onCreate: (db, _) async {
-            await db.execute('''
+  test('legacy migration preserves data and adds current schema', () async {
+    await helper.close();
+    final legacyPath = p.join(directory.path, 'legacy.db');
+    final legacyDatabase = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, _) async {
+          await db.execute('''
             CREATE TABLE categories (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               name TEXT NOT NULL,
@@ -555,7 +603,7 @@ void main() {
               UNIQUE (id, type)
             )
           ''');
-            await db.execute('''
+          await db.execute('''
             CREATE TABLE transactions (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               amount REAL NOT NULL,
@@ -565,37 +613,36 @@ void main() {
               note TEXT
             )
           ''');
-            await db.insert('categories', {
-              'name': 'My custom category',
-              'icon': 'star',
-              'color': 0xFF112233,
-              'type': 'expense',
-            });
-          },
-        ),
-      );
-      await legacyDatabase.close();
+          await db.insert('categories', {
+            'name': 'My custom category',
+            'icon': 'star',
+            'color': 0xFF112233,
+            'type': 'expense',
+          });
+        },
+      ),
+    );
+    await legacyDatabase.close();
 
-      helper = DatabaseHelper.forTesting(
-        databaseFactory: databaseFactoryFfi,
-        databasePath: legacyPath,
-      );
-      await helper.initialize();
+    helper = DatabaseHelper.forTesting(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: legacyPath,
+    );
+    await helper.initialize();
 
-      expect(await (await helper.database).getVersion(), 4);
-      final categories = await helper.getCategories(includeArchived: true);
-      expect(categories, hasLength(1));
-      expect(categories.single['name'], 'My custom category');
-      expect(categories.single['is_archived'], 0);
-      final tables = await (await helper.database).rawQuery(
-        "SELECT name FROM sqlite_master WHERE type = 'table'",
-      );
-      expect(
-        tables.map((row) => row['name']),
-        containsAll(['budgets', 'recurring_rules']),
-      );
-    },
-  );
+    expect(await (await helper.database).getVersion(), 5);
+    final categories = await helper.getCategories(includeArchived: true);
+    expect(categories, hasLength(1));
+    expect(categories.single['name'], 'My custom category');
+    expect(categories.single['is_archived'], 0);
+    final tables = await (await helper.database).rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    expect(
+      tables.map((row) => row['name']),
+      containsAll(['budgets', 'recurring_rules']),
+    );
+  });
 }
 
 class _FailOnceFactory implements DatabaseFactory {
