@@ -103,14 +103,24 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add_category')));
     await tester.pumpAndSettle();
     expect(find.text('New category'), findsOneWidget);
-    await tester.drag(
-      find.byType(Scrollable).last,
-      const Offset(0, -1000),
-    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -1000));
     await tester.pumpAndSettle();
     expect(find.text('Add category'), findsOneWidget);
     await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('backup_restore')),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const ValueKey('backup_restore')));
+    await tester.pumpAndSettle();
+    expect(find.text('Backup & restore'), findsOneWidget);
+    expect(find.text('Create backup'), findsOneWidget);
+    expect(find.text('Restore backup'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

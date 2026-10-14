@@ -85,7 +85,9 @@ class UserGuideScreen extends StatelessWidget {
                           icon: CupertinoIcons.square_arrow_up,
                           title: 'Keep a backup',
                           message:
-                              'Use the export button on Home to create a CSV backup and save a copy somewhere you trust.',
+                              'Open Settings → Backup & restore to create a '
+                              'restorable Kyat Flow backup. Keep CSV export '
+                              'from Home for spreadsheet viewing.',
                         ),
                       ],
                     ),
@@ -117,7 +119,9 @@ class UserGuideScreen extends StatelessWidget {
                           icon: CupertinoIcons.lock_shield,
                           title: 'Your data stays local',
                           message:
-                              'Kyat Flow stores your records on this device. Export backups regularly before changing phones.',
+                              'Kyat Flow stores your records on this device. '
+                              'Create a restorable backup regularly and before '
+                              'reinstalling or changing phones.',
                         ),
                       ],
                     ),

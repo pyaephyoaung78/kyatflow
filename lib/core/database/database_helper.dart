@@ -668,6 +668,189 @@ class DatabaseHelper {
     });
   }
 
+  /// Restores a validated snapshot in one transaction.
+  ///
+  /// Replace preserves the backup IDs. Merge keeps local records, maps backup
+  /// categories by type and case-insensitive name, and skips duplicate data.
+  Future<DatabaseRestoreResult> restoreBackupSnapshot(
+    DatabaseBackupSnapshot snapshot, {
+    required DatabaseRestoreMode mode,
+  }) async {
+    return (await database).transaction((txn) async {
+      if (mode == DatabaseRestoreMode.replace) {
+        return _replaceBackupSnapshot(txn, snapshot);
+      }
+      return _mergeBackupSnapshot(txn, snapshot);
+    });
+  }
+
+  Future<DatabaseRestoreResult> _replaceBackupSnapshot(
+    Transaction txn,
+    DatabaseBackupSnapshot snapshot,
+  ) async {
+    await txn.delete('transactions');
+    await txn.delete('budgets');
+    await txn.delete('recurring_rules');
+    await txn.delete('categories');
+    await txn.rawDelete(
+      "DELETE FROM sqlite_sequence WHERE name IN "
+      "('categories', 'transactions', 'budgets', 'recurring_rules')",
+    );
+
+    for (final row in snapshot.categories) {
+      await txn.insert('categories', row);
+    }
+    for (final row in snapshot.transactions) {
+      await txn.insert('transactions', row);
+    }
+    for (final row in snapshot.budgets) {
+      await txn.insert('budgets', row);
+    }
+    for (final row in snapshot.recurringRules) {
+      await txn.insert('recurring_rules', row);
+    }
+
+    return DatabaseRestoreResult(
+      mode: DatabaseRestoreMode.replace,
+      categoriesAdded: snapshot.categories.length,
+      transactionsAdded: snapshot.transactions.length,
+      budgetsAdded: snapshot.budgets.length,
+      recurringRulesAdded: snapshot.recurringRules.length,
+      skippedRecords: 0,
+    );
+  }
+
+  Future<DatabaseRestoreResult> _mergeBackupSnapshot(
+    Transaction txn,
+    DatabaseBackupSnapshot snapshot,
+  ) async {
+    final localCategories = await txn.query('categories');
+    final categoryIds = <int, int>{};
+    var categoriesAdded = 0;
+    var transactionsAdded = 0;
+    var budgetsAdded = 0;
+    var recurringRulesAdded = 0;
+    var skipped = 0;
+
+    final categoriesByIdentity = <(String, String), int>{
+      for (final row in localCategories)
+        ((row['type'] as String), (row['name'] as String).trim().toLowerCase()):
+            row['id'] as int,
+    };
+    for (final row in snapshot.categories) {
+      final sourceId = row['id'] as int;
+      final identity = (
+        row['type'] as String,
+        (row['name'] as String).trim().toLowerCase(),
+      );
+      final existingId = categoriesByIdentity[identity];
+      if (existingId != null) {
+        categoryIds[sourceId] = existingId;
+        skipped++;
+        continue;
+      }
+      final values = Map<String, Object?>.from(row)..remove('id');
+      final insertedId = await txn.insert('categories', values);
+      categoriesByIdentity[identity] = insertedId;
+      categoryIds[sourceId] = insertedId;
+      categoriesAdded++;
+    }
+
+    final localTransactions = await txn.query('transactions');
+    final transactionIdentities = <(double, String, int, int, String?)>{
+      for (final row in localTransactions)
+        (
+          (row['amount'] as num).toDouble(),
+          row['type'] as String,
+          row['category_id'] as int,
+          row['timestamp'] as int,
+          row['note'] as String?,
+        ),
+    };
+    for (final row in snapshot.transactions) {
+      final destinationCategoryId = categoryIds[row['category_id'] as int]!;
+      final identity = (
+        (row['amount'] as num).toDouble(),
+        row['type'] as String,
+        destinationCategoryId,
+        row['timestamp'] as int,
+        row['note'] as String?,
+      );
+      if (!transactionIdentities.add(identity)) {
+        skipped++;
+        continue;
+      }
+      final values = Map<String, Object?>.from(row)
+        ..remove('id')
+        ..['category_id'] = destinationCategoryId;
+      await txn.insert('transactions', values);
+      transactionsAdded++;
+    }
+
+    final localBudgets = await txn.query('budgets');
+    final budgetIdentities = <(int, int, int)>{
+      for (final row in localBudgets)
+        (row['category_id'] as int, row['month'] as int, row['year'] as int),
+    };
+    for (final row in snapshot.budgets) {
+      final destinationCategoryId = categoryIds[row['category_id'] as int]!;
+      final identity = (
+        destinationCategoryId,
+        row['month'] as int,
+        row['year'] as int,
+      );
+      if (!budgetIdentities.add(identity)) {
+        skipped++;
+        continue;
+      }
+      final values = Map<String, Object?>.from(row)
+        ..remove('id')
+        ..['category_id'] = destinationCategoryId;
+      await txn.insert('budgets', values);
+      budgetsAdded++;
+    }
+
+    final localRules = await txn.query('recurring_rules');
+    final ruleIdentities = <(String, double, int, String, String)>{
+      for (final row in localRules)
+        (
+          (row['name'] as String).trim().toLowerCase(),
+          (row['amount'] as num).toDouble(),
+          row['category_id'] as int,
+          row['type'] as String,
+          row['frequency'] as String,
+        ),
+    };
+    for (final row in snapshot.recurringRules) {
+      final destinationCategoryId = categoryIds[row['category_id'] as int]!;
+      final identity = (
+        (row['name'] as String).trim().toLowerCase(),
+        (row['amount'] as num).toDouble(),
+        destinationCategoryId,
+        row['type'] as String,
+        row['frequency'] as String,
+      );
+      if (!ruleIdentities.add(identity)) {
+        skipped++;
+        continue;
+      }
+      final values = Map<String, Object?>.from(row)
+        ..remove('id')
+        ..['category_id'] = destinationCategoryId;
+      await txn.insert('recurring_rules', values);
+      recurringRulesAdded++;
+    }
+
+    return DatabaseRestoreResult(
+      mode: DatabaseRestoreMode.merge,
+      categoriesAdded: categoriesAdded,
+      transactionsAdded: transactionsAdded,
+      budgetsAdded: budgetsAdded,
+      recurringRulesAdded: recurringRulesAdded,
+      skippedRecords: skipped,
+    );
+  }
+
   /// Replaces editable fields; a null [note] clears an existing note.
   Future<int> updateTransaction({
     required int id,
@@ -882,6 +1065,29 @@ class DatabaseBackupSnapshot {
   final List<Map<String, Object?>> transactions;
   final List<Map<String, Object?>> budgets;
   final List<Map<String, Object?>> recurringRules;
+}
+
+enum DatabaseRestoreMode { replace, merge }
+
+class DatabaseRestoreResult {
+  const DatabaseRestoreResult({
+    required this.mode,
+    required this.categoriesAdded,
+    required this.transactionsAdded,
+    required this.budgetsAdded,
+    required this.recurringRulesAdded,
+    required this.skippedRecords,
+  });
+
+  final DatabaseRestoreMode mode;
+  final int categoriesAdded;
+  final int transactionsAdded;
+  final int budgetsAdded;
+  final int recurringRulesAdded;
+  final int skippedRecords;
+
+  int get recordsAdded =>
+      categoriesAdded + transactionsAdded + budgetsAdded + recurringRulesAdded;
 }
 
 const _defaultCategories = <Map<String, Object?>>[

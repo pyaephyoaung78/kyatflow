@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/finance_widgets.dart';
+import 'backup_restore_screen.dart';
 import 'category_management_screen.dart';
 import 'user_guide_screen.dart';
 
@@ -68,6 +69,21 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 28),
+      const SectionHeading('Data'),
+      SurfaceGroup(
+        children: [
+          _SettingsLinkRow(
+            key: const ValueKey('backup_restore'),
+            icon: CupertinoIcons.arrow_up_arrow_down,
+            title: 'Backup & restore',
+            value: 'Protect or recover your local records',
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const BackupRestoreScreen()),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 28),
       const SectionHeading('Preferences'),
       const SurfaceGroup(
         children: [
@@ -97,7 +113,7 @@ class SettingsScreen extends StatelessWidget {
       const Padding(
         padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
         child: Text(
-          'Keep a copy of your records using the export button on Home.',
+          'CSV export remains available from Home for spreadsheet viewing.',
           style: AppTheme.caption,
         ),
       ),

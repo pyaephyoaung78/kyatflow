@@ -18,11 +18,11 @@ class TransactionListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final income = transaction.type == TransactionType.income;
     final note = transaction.note?.trim();
-    final subtitle = note == null || note.isEmpty
-        ? showDate
-              ? formatShortDate(transaction.timestamp)
-              : formatTransactionTime(transaction.timestamp)
-        : note;
+    final hasNote = note != null && note.isNotEmpty;
+    final metadata = showDate
+        ? '${formatShortDate(transaction.timestamp)} · '
+              '${formatTransactionTime(transaction.timestamp)}'
+        : formatTransactionTime(transaction.timestamp);
     final amount = Text(
       '${income ? '+' : '−'}${formatMoney(transaction.amount)}',
       style: TextStyle(
@@ -69,13 +69,19 @@ class TransactionListTile extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.caption,
-                    ),
+                    if (hasNote || stacked) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        hasNote ? note : metadata,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.caption,
+                      ),
+                    ],
+                    if (stacked && hasNote) ...[
+                      const SizedBox(height: 3),
+                      Text(metadata, style: AppTheme.caption),
+                    ],
                     if (stacked) ...[const SizedBox(height: 6), amount],
                   ],
                 ),
@@ -87,13 +93,8 @@ class TransactionListTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       FittedBox(fit: BoxFit.scaleDown, child: amount),
-                      if (showDate) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          formatShortDate(transaction.timestamp),
-                          style: AppTheme.caption,
-                        ),
-                      ],
+                      const SizedBox(height: 4),
+                      Text(metadata, style: AppTheme.caption),
                     ],
                   ),
                 ),

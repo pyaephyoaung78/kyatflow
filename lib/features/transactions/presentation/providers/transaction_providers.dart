@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/backup/csv_backup_service.dart';
+import '../../../../core/backup/kyatflow_backup_service.dart';
 import '../../data/repositories/sqlite_transaction_repository.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../../domain/entities/transaction_category.dart';
@@ -65,4 +66,10 @@ final analyticsStateProvider =
 
 final csvBackupServiceProvider = Provider<CsvBackupService>((ref) {
   return CsvBackupService(databaseHelper: ref.watch(databaseHelperProvider));
+});
+
+final kyatFlowBackupServiceProvider = Provider<KyatFlowBackupService>((ref) {
+  return KyatFlowBackupService(
+    databaseHelper: ref.watch(databaseHelperProvider),
+  );
 });

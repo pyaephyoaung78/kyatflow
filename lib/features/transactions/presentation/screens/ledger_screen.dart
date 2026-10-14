@@ -262,7 +262,8 @@ class LedgerScreen extends ConsumerWidget {
         title: Text(transaction.categoryName ?? 'Transaction'),
         message: Text(
           '${formatMoney(transaction.amount)} · '
-          '${formatShortDate(transaction.timestamp)}'
+          '${formatShortDate(transaction.timestamp)} · '
+          '${formatTransactionTime(transaction.timestamp)}'
           '${note == null || note.isEmpty ? '' : '\n$note'}',
         ),
         actions: [
